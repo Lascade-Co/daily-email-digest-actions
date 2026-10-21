@@ -24,12 +24,12 @@ def _rate_color(rate):
     return "#c0392b"
 
 
-def _line_chart(app):
-    """Inline SVG sparkline of cohort conversion rates over the lookback window.
+def _bar_chart(app):
+    """Pure HTML/CSS bar chart of cohort conversion rates.
 
+    Uses table cells with background-color for Gmail/Outlook compatibility.
     Renders chronologically (oldest left, newest right) with the most recent
-    data point highlighted. Progressive enhancement — clients that strip SVG
-    (Gmail, Outlook) still see the data table below.
+    bar highlighted in the rate color and labeled.
     """
     cohorts = app["cohorts"]
     if len(cohorts) < 2:
@@ -39,79 +39,68 @@ def _line_chart(app):
     n = len(pts)
     rates = [p["rate"] for p in pts]
 
-    W, H = 520, 130
-    PL, PR, PT, PB = 40, 20, 22, 24
+    CHART_H = 80
+    MIN_FRAC = 0.2
 
     r_min, r_max = min(rates), max(rates)
-    r_span = r_max - r_min
-    if r_span < 0.3:
-        r_mid = (r_max + r_min) / 2
-        r_min, r_max = r_mid - 0.2, r_mid + 0.2
+    r_range = r_max - r_min
+
+    if r_range < 0.01:
+        bar_heights = [int(CHART_H * 0.6)] * n
     else:
-        r_min = max(0, r_min - r_span * 0.15)
-        r_max += r_span * 0.2
-    r_span = r_max - r_min
+        bar_heights = []
+        for r in rates:
+            frac = MIN_FRAC + (1 - MIN_FRAC) * (r - r_min) / r_range
+            bar_heights.append(max(4, int(CHART_H * frac)))
 
-    pw, ph = W - PL - PR, H - PT - PB
-
-    def sx(i):
-        return PL + (i / (n - 1)) * pw
-
-    def sy(r):
-        return PT + (1 - (r - r_min) / r_span) * ph
-
-    coords = [(sx(i), sy(r)) for i, r in enumerate(rates)]
-    poly = " ".join(f"{x:.1f},{y:.1f}" for x, y in coords)
-
-    lx, ly = coords[-1]
-    lr = pts[-1]["rate"]
-    lc = _rate_color(lr)
+    last_rate = pts[-1]["rate"]
+    last_color = _rate_color(last_rate)
+    bar_color = "#d0cdc9"
 
     s = []
     a = s.append
 
-    a(f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
-      f'viewBox="0 0 {W} {H}" style="display:block;width:100%;height:auto;">')
+    a(f'<table role="presentation" cellspacing="0" cellpadding="0" border="0" '
+      f'width="100%">')
 
-    for frac in [0, 0.5, 1.0]:
-        val = r_min + frac * r_span
-        y = sy(val)
-        a(f'<line x1="{PL}" y1="{y:.1f}" x2="{W - PR}" y2="{y:.1f}" '
-          f'stroke="#e8e6e3" stroke-width="1"/>')
-        a(f'<text x="{PL - 6}" y="{y:.1f}" text-anchor="end" '
-          f'dominant-baseline="middle" fill="#aaa" '
-          f'font-family="Inter,system-ui,sans-serif" font-size="9">'
-          f'{val:.1f}%</text>')
+    # Bar row
+    a('<tr>')
+    for i, (pt, bh) in enumerate(zip(pts, bar_heights)):
+        is_last = (i == n - 1)
+        color = last_color if is_last else bar_color
+        spacer_h = CHART_H - bh
 
-    base_y = PT + ph
-    area = (f"{coords[0][0]:.1f},{base_y:.1f} {poly} "
-            f"{coords[-1][0]:.1f},{base_y:.1f}")
-    a(f'<polygon points="{area}" fill="#222" fill-opacity="0.04"/>')
+        a(f'<td style="vertical-align:bottom;padding:0 1px;'
+          f'font-family:{FH};text-align:center;">')
 
-    a(f'<polyline points="{poly}" fill="none" stroke="#555" '
-      f'stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>')
+        a(f'<table role="presentation" cellspacing="0" cellpadding="0" '
+          f'border="0" width="100%">')
+        if is_last:
+            a(f'<tr><td style="padding:0 0 3px 0;text-align:center;">'
+              f'<p style="margin:0;font-family:{FH};font-size:10px;'
+              f'font-weight:700;color:{last_color};">'
+              f'{format_pct(last_rate)}%</p></td></tr>')
+        else:
+            a(f'<tr><td style="height:{spacer_h}px;font-size:1px;'
+              f'line-height:1px;">&nbsp;</td></tr>')
+        a(f'<tr><td style="height:{bh}px;background-color:{color};'
+          f'border-radius:3px 3px 0 0;font-size:1px;line-height:1px;">'
+          f'&nbsp;</td></tr>')
+        a('</table></td>')
+    a('</tr>')
 
-    for x, y in coords[:-1]:
-        a(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="2.5" fill="#555"/>')
+    # Date labels row
+    mid = n // 2
+    a('<tr>')
+    a(f'<td colspan="{mid}" style="padding:6px 0 0 0;text-align:left;">'
+      f'<p style="margin:0;font-family:{FH};font-size:9px;color:#aaa;">'
+      f'{escape(format_cohort_date(pts[0]["date"]))}</p></td>')
+    a(f'<td colspan="{n - mid}" style="padding:6px 0 0 0;text-align:right;">'
+      f'<p style="margin:0;font-family:{FH};font-size:9px;color:#aaa;">'
+      f'{escape(format_cohort_date(pts[-1]["date"]))}</p></td>')
+    a('</tr>')
 
-    a(f'<circle cx="{lx:.1f}" cy="{ly:.1f}" r="5" fill="{lc}" '
-      f'stroke="#fff" stroke-width="2"/>')
-    label_y = ly - 12 if ly - 12 > 8 else ly + 16
-    a(f'<text x="{lx:.1f}" y="{label_y:.1f}" text-anchor="end" fill="{lc}" '
-      f'font-family="Inter,system-ui,sans-serif" font-size="11" '
-      f'font-weight="700">{format_pct(lr)}%</text>')
-
-    for idx, anchor in [(0, "start"), (n - 1, "end")]:
-        a(f'<text x="{sx(idx):.1f}" y="{H - 4}" text-anchor="{anchor}" '
-          f'fill="#aaa" font-family="Inter,system-ui,sans-serif" font-size="9">'
-          f'{escape(format_cohort_date(pts[idx]["date"]))}</text>')
-    if n > 4:
-        mid = n // 2
-        a(f'<text x="{sx(mid):.1f}" y="{H - 4}" text-anchor="middle" '
-          f'fill="#aaa" font-family="Inter,system-ui,sans-serif" font-size="9">'
-          f'{escape(format_cohort_date(pts[mid]["date"]))}</text>')
-
-    a('</svg>')
+    a('</table>')
     return "".join(s)
 
 
@@ -293,7 +282,7 @@ def _cohort_section(app):
        f'<h2 class="email-h2" style="margin:0;font-family:{FH};font-size:18px;'
        f'font-weight:700;line-height:1.3;color:#222;">{escape(app["name"])}</h2>'
        f'</td></tr>')
-    chart = _line_chart(app)
+    chart = _bar_chart(app)
     if chart:
         _a(f'<tr><td style="padding:10px 40px 0 40px;" class="body-cell">'
            f'<table role="presentation" cellspacing="0" cellpadding="0" border="0" '
