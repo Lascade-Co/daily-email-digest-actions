@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Orchestrator for the daily reviews digest. Fetch, model, render, send.
 
-  python3 reviews_main.py --report-date 2026-10-20 --apps reviews_apps.json [--dry-run] [--to angel@…]
+  python3 reviews_main.py --report-date 2026-10-20 --apps reviews_apps.json \
+      --recipients angel@…,cherian@… [--dry-run] [--to angel@…]
 
 Public repo — never log review text or response bodies, only counts and statuses.
 """
@@ -30,8 +31,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--report-date", required=True, help="YYYY-MM-DD")
     ap.add_argument("--apps", required=True, help="Path to reviews_apps.json")
+    ap.add_argument("--recipients", default="", help="Comma-separated production recipients")
     ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--to", default="")
+    ap.add_argument("--to", default="", help="Test mode: send [TEST] email to this address only")
     a = ap.parse_args()
 
     asc_key_id = os.environ.get("ASC_KEY_ID", "")
@@ -100,20 +102,17 @@ def main():
         print("wrote reviews-email.html")
         return
 
-    if model["grand_total"] == 0:
-        print("no reviews, skipping email")
-        return
-
     if not gmail_user or not gmail_password:
         sys.exit("GMAIL_USER / GMAIL_APP_PASSWORD not set")
 
-    is_test = bool(a.to)
-    if is_test:
+    if a.to:
         recipients = [a.to]
         prefix = "[TEST] "
-    else:
-        recipients = ["angelrose@lascade.com", "cherian@lascade.com"]
+    elif a.recipients:
+        recipients = [r.strip() for r in a.recipients.split(",") if r.strip()]
         prefix = ""
+    else:
+        sys.exit("Either --to or --recipients must be provided")
 
     msg = MIMEMultipart("alternative")
     msg["From"] = f"Lascade Reviews <{gmail_user}>"
@@ -125,7 +124,7 @@ def main():
         server.starttls()
         server.login(gmail_user, gmail_password)
         server.sendmail(gmail_user, recipients, msg.as_string())
-    print("sent")
+    print(f"sent to {', '.join(recipients)}")
 
 
 if __name__ == "__main__":

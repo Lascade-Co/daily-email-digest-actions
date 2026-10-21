@@ -1,6 +1,9 @@
 name: Daily Survey Digest
 
 on:
+  schedule:
+    - cron: '30 0 * * *'     # 6:00 AM IST → angelrose@lascade.com
+    - cron: '0 14 * * *'     # 6:00 AM PST → cherian@lascade.com
   workflow_dispatch:
     inputs:
       dry_run:
@@ -8,65 +11,62 @@ on:
         type: boolean
         default: false
       to:
-        description: "Send a [TEST] email only to this address"
+        description: "Test: send [TEST] email to this address only"
         type: string
         default: ""
-  schedule:
-    # Target 13:00 UTC (6:30 PM IST). Three crons; gate holds until target.
-    - cron: '29 10 * * *'
-    - cron: '29 11 * * *'
-    - cron: '29 12 * * *'
+      slot:
+        description: "Which timezone slot (ignored when 'to' is set)"
+        type: choice
+        options: [both, IST, PST]
+        default: both
 
 permissions:
   contents: read
-  actions: read
 
 concurrency:
-  group: daily-survey-${{ github.event_name }}
+  group: survey-${{ github.event.schedule || inputs.slot || 'manual' }}
   cancel-in-progress: false
 
 env:
   RAW: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}
 
 jobs:
-  gate:
+  resolve:
     runs-on: ubuntu-latest
-    timeout-minutes: 350
     outputs:
-      proceed: ${{ steps.gate.outputs.proceed }}
-      report_date: ${{ steps.gate.outputs.report_date }}
+      run_ist: ${{ steps.s.outputs.run_ist }}
+      run_pst: ${{ steps.s.outputs.run_pst }}
+      report_date: ${{ steps.s.outputs.report_date }}
     steps:
-      - id: gate
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - id: s
         run: |
-          curl -fsSL -o catchup_gate.py "$RAW/scripts/catchup/catchup_gate.py"
-          python3 catchup_gate.py --phase 1 --event "${{ github.event_name }}" \
-            --workflow daily-survey.yml \
-            --target-tz UTC --target-hour 13 --target-minute 0 --cutoff-hour 23
+          echo "report_date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            case "${{ github.event.schedule }}" in
+              "30 0 * * *")  echo "run_ist=true"  >> "$GITHUB_OUTPUT"; echo "run_pst=false" >> "$GITHUB_OUTPUT" ;;
+              "0 14 * * *")  echo "run_ist=false" >> "$GITHUB_OUTPUT"; echo "run_pst=true"  >> "$GITHUB_OUTPUT" ;;
+            esac
+          else
+            TO="${{ inputs.to }}"
+            SLOT="${{ inputs.slot }}"
+            if [ -n "$TO" ]; then
+              echo "run_ist=true"  >> "$GITHUB_OUTPUT"
+              echo "run_pst=false" >> "$GITHUB_OUTPUT"
+            elif [ "$SLOT" = "IST" ]; then
+              echo "run_ist=true"  >> "$GITHUB_OUTPUT"
+              echo "run_pst=false" >> "$GITHUB_OUTPUT"
+            elif [ "$SLOT" = "PST" ]; then
+              echo "run_ist=false" >> "$GITHUB_OUTPUT"
+              echo "run_pst=true"  >> "$GITHUB_OUTPUT"
+            else
+              echo "run_ist=true"  >> "$GITHUB_OUTPUT"
+              echo "run_pst=true"  >> "$GITHUB_OUTPUT"
+            fi
+          fi
 
-  gate2:
-    needs: gate
-    if: needs.gate.outputs.proceed == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 350
-    outputs:
-      proceed: ${{ steps.gate.outputs.proceed }}
-      report_date: ${{ steps.gate.outputs.report_date }}
-    steps:
-      - id: gate
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          curl -fsSL -o catchup_gate.py "$RAW/scripts/catchup/catchup_gate.py"
-          python3 catchup_gate.py --phase 2 --event "${{ github.event_name }}" \
-            --workflow daily-survey.yml \
-            --report-date "${{ needs.gate.outputs.report_date }}" \
-            --target-tz UTC --target-hour 13 --target-minute 0 --cutoff-hour 23
-
-  email:
-    needs: gate2
-    if: needs.gate2.outputs.proceed == 'true'
+  email-ist:
+    needs: resolve
+    if: needs.resolve.outputs.run_ist == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -86,28 +86,76 @@ jobs:
           curl -fsSL --retry 3 --retry-delay 2 -o survey_marine.json "$RAW/data/survey_marine.json"
           curl -fsSL --retry 3 --retry-delay 2 -o survey_measure.json "$RAW/data/survey_measure.json"
 
-      - name: Send Marine Radar survey digest
+      - name: Send Marine Radar survey digest (IST)
         env:
           GOOGLE_SA_KEY: ${{ secrets.GOOGLE_SA_KEY }}
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-          REPORT_DATE: ${{ needs.gate2.outputs.report_date }}
         run: |
           python3 survey_main.py \
-            --report-date "$REPORT_DATE" \
+            --report-date "${{ needs.resolve.outputs.report_date }}" \
             --config survey_marine.json \
+            --recipients "angelrose@lascade.com" \
             ${{ inputs.dry_run && '--dry-run' || '' }} \
             ${{ inputs.to && format('--to "{0}"', inputs.to) || '' }}
 
-      - name: Send Smart Ruler survey digest
+      - name: Send Smart Ruler survey digest (IST)
         env:
           GOOGLE_SA_KEY: ${{ secrets.GOOGLE_SA_KEY }}
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-          REPORT_DATE: ${{ needs.gate2.outputs.report_date }}
         run: |
           python3 survey_main.py \
-            --report-date "$REPORT_DATE" \
+            --report-date "${{ needs.resolve.outputs.report_date }}" \
             --config survey_measure.json \
+            --recipients "angelrose@lascade.com" \
+            ${{ inputs.dry_run && '--dry-run' || '' }} \
+            ${{ inputs.to && format('--to "{0}"', inputs.to) || '' }}
+
+  email-pst:
+    needs: resolve
+    if: needs.resolve.outputs.run_pst == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      - name: Install dependencies
+        run: pip install --quiet requests==2.34.2 google-auth==2.56.3 langdetect==1.0.9
+
+      - name: Download scripts
+        run: |
+          for m in survey_fetch survey_model survey_render survey_main; do
+            curl -fsSL --retry 3 --retry-delay 2 -o "$m.py" "$RAW/scripts/survey/$m.py"
+          done
+          curl -fsSL --retry 3 --retry-delay 2 -o survey_marine.json "$RAW/data/survey_marine.json"
+          curl -fsSL --retry 3 --retry-delay 2 -o survey_measure.json "$RAW/data/survey_measure.json"
+
+      - name: Send Marine Radar survey digest (PST)
+        env:
+          GOOGLE_SA_KEY: ${{ secrets.GOOGLE_SA_KEY }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+        run: |
+          python3 survey_main.py \
+            --report-date "${{ needs.resolve.outputs.report_date }}" \
+            --config survey_marine.json \
+            --recipients "cherian@lascade.com" \
+            ${{ inputs.dry_run && '--dry-run' || '' }} \
+            ${{ inputs.to && format('--to "{0}"', inputs.to) || '' }}
+
+      - name: Send Smart Ruler survey digest (PST)
+        env:
+          GOOGLE_SA_KEY: ${{ secrets.GOOGLE_SA_KEY }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+        run: |
+          python3 survey_main.py \
+            --report-date "${{ needs.resolve.outputs.report_date }}" \
+            --config survey_measure.json \
+            --recipients "cherian@lascade.com" \
             ${{ inputs.dry_run && '--dry-run' || '' }} \
             ${{ inputs.to && format('--to "{0}"', inputs.to) || '' }}

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Orchestrator for the daily revenue digest. Fetch, model, render, send.
 
-  python3 revenue_main.py --report-date 2026-10-20 [--dry-run] [--to angel@…]
+  python3 revenue_main.py --report-date 2026-10-20 \
+      --recipients angel@…,cherian@… [--dry-run] [--to angel@…]
 
 Public repo — never log amounts, charge IDs, or response bodies.
 """
@@ -28,8 +29,9 @@ def _mask(value):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--report-date", required=True, help="YYYY-MM-DD")
+    ap.add_argument("--recipients", default="", help="Comma-separated production recipients")
     ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--to", default="")
+    ap.add_argument("--to", default="", help="Test mode: send [TEST] email to this address only")
     a = ap.parse_args()
 
     stripe_key = os.environ.get("STRIPE_API_KEY", "")
@@ -76,13 +78,14 @@ def main():
     if not gmail_user or not gmail_password:
         sys.exit("GMAIL_USER / GMAIL_APP_PASSWORD not set")
 
-    is_test = bool(a.to)
-    if is_test:
+    if a.to:
         recipients = [a.to]
         prefix = "[TEST] "
-    else:
-        recipients = ["angelrose@lascade.com", "cherian@lascade.com"]
+    elif a.recipients:
+        recipients = [r.strip() for r in a.recipients.split(",") if r.strip()]
         prefix = ""
+    else:
+        sys.exit("Either --to or --recipients must be provided")
 
     msg = MIMEMultipart("alternative")
     msg["From"] = f"Lascade Revenue <{gmail_user}>"
@@ -94,7 +97,7 @@ def main():
         server.starttls()
         server.login(gmail_user, gmail_password)
         server.sendmail(gmail_user, recipients, msg.as_string())
-    print("sent")
+    print(f"sent to {', '.join(recipients)}")
 
 
 if __name__ == "__main__":

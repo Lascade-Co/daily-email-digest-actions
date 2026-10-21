@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Orchestrator for the daily survey digest. Fetch, model, render, send.
 
-  python3 survey_main.py --report-date 2026-10-20 --config survey_marine.json [--dry-run] [--to angel@…]
+  python3 survey_main.py --report-date 2026-10-20 --config survey_marine.json \
+      --recipients angel@…,cherian@… [--dry-run] [--to angel@…]
 
 Each product gets its own config file and its own email.
 Public repo — never log response text, only counts and statuses.
@@ -32,8 +33,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--report-date", required=True, help="YYYY-MM-DD")
     ap.add_argument("--config", required=True, help="Path to product survey config JSON")
+    ap.add_argument("--recipients", default="", help="Comma-separated production recipients")
     ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--to", default="")
+    ap.add_argument("--to", default="", help="Test mode: send [TEST] email to this address only")
     a = ap.parse_args()
 
     google_sa_b64 = os.environ.get("GOOGLE_SA_KEY", "")
@@ -92,20 +94,17 @@ def main():
         print(f"wrote {fname}")
         return
 
-    if model["total"] == 0:
-        print("no new responses, skipping email")
-        return
-
     if not gmail_user or not gmail_password:
         sys.exit("GMAIL_USER / GMAIL_APP_PASSWORD not set")
 
-    is_test = bool(a.to)
-    if is_test:
+    if a.to:
         recipients = [a.to]
         prefix = "[TEST] "
-    else:
-        recipients = ["angelrose@lascade.com", "cherian@lascade.com"]
+    elif a.recipients:
+        recipients = [r.strip() for r in a.recipients.split(",") if r.strip()]
         prefix = ""
+    else:
+        sys.exit("Either --to or --recipients must be provided")
 
     msg = MIMEMultipart("alternative")
     msg["From"] = f"Lascade Surveys <{gmail_user}>"
@@ -117,7 +116,7 @@ def main():
         server.starttls()
         server.login(gmail_user, gmail_password)
         server.sendmail(gmail_user, recipients, msg.as_string())
-    print(f"sent ({product_name})")
+    print(f"sent ({product_name}) to {', '.join(recipients)}")
 
 
 if __name__ == "__main__":
