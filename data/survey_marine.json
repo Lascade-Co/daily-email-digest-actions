@@ -28,7 +28,7 @@
       "sheet_name": "D15 Survey",
       "label": "Day 15",
       "subtitle": "Feature usage",
-      "render": "summary",
+      "render": "distribution",
       "columns": [
         {"col": 1, "header": "Features used"},
         {
