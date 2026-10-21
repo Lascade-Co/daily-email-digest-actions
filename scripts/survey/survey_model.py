@@ -115,9 +115,88 @@ def _cell_value(row, col_index):
 
 
 import re
+import json
+import logging
+import urllib.request
+import urllib.error
+
+log = logging.getLogger(__name__)
 
 _OTHER_RE = re.compile(r"^other\b", re.IGNORECASE)
 _LOW_VALUE = {"", "—", "-", "n/a", "na", "none", "no", "nothing", "nil", ".", "ok", "good"}
+_MAX_SUMMARY_GROUPS = 8
+
+_GROUP_PROMPT = """\
+You are a survey response analyst. Given a list of user responses (already translated to English), \
+group similar responses into themed summary points.
+
+Rules:
+- Each group has a short summary (max 12 words) describing the common theme
+- Include specific examples (ship names, feature names) in parentheses when relevant
+- Discard low-value responses like "ok", "good", "nothing", single characters
+- Maximum {max_groups} groups; roll remaining into an "Other responses" group
+- Return ONLY valid JSON, no markdown fences
+
+Responses:
+{responses}
+
+Return JSON array: [{{"summary": "...", "count": N}}, ...]
+Count = number of original responses in that group. Total counts must equal {total}."""
+
+
+def _llm_group(texts, gemini_key):
+    """Group responses using Gemini Flash."""
+    prompt = _GROUP_PROMPT.format(
+        responses="\n".join(f"- {t}" for t in texts),
+        total=len(texts),
+        max_groups=_MAX_SUMMARY_GROUPS,
+    )
+    body = json.dumps({
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "temperature": 0.1,
+            "maxOutputTokens": 1024,
+            "responseMimeType": "application/json",
+        },
+    }).encode()
+    url = (
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        "gemini-2.0-flash:generateContent?key=" + gemini_key
+    )
+    req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read())
+        raw = data["candidates"][0]["content"]["parts"][0]["text"]
+        groups = json.loads(raw)
+        return [{"text": g["summary"], "count": g["count"]} for g in groups]
+    except Exception as e:
+        log.warning("Gemini grouping failed, falling back to simple: %s", e)
+        return None
+
+
+def _simple_group(texts):
+    """Fallback: exact-match grouping via Counter."""
+    counted = Counter(texts)
+    results = [{"text": t, "count": c} for t, c in counted.most_common()]
+    if len(results) > _MAX_SUMMARY_GROUPS:
+        kept = results[:_MAX_SUMMARY_GROUPS]
+        rest = sum(g["count"] for g in results[_MAX_SUMMARY_GROUPS:])
+        kept.append({"text": f"{rest} other responses", "count": rest})
+        results = kept
+    return results
+
+
+def _fuzzy_group(texts, gemini_key=None):
+    if not texts:
+        return []
+    if len(texts) == 1:
+        return [{"text": texts[0], "count": 1}]
+    if gemini_key:
+        result = _llm_group(texts, gemini_key)
+        if result:
+            return result
+    return _simple_group(texts)
 
 
 def _split_multi(val, color_map=None):
@@ -157,7 +236,7 @@ def _is_meaningful(text):
     return text.strip().lower() not in _LOW_VALUE and len(text.strip()) > 2
 
 
-def build_model(config, fetched_tabs, cutoff_dt, now_dt, translate_fn=None, display_tz=None):
+def build_model(config, fetched_tabs, cutoff_dt, now_dt, translate_fn=None, display_tz=None, gemini_key=None):
     """Build the template model from config + raw sheet data.
 
     Supports two status patterns:
@@ -272,7 +351,7 @@ def build_model(config, fetched_tabs, cutoff_dt, now_dt, translate_fn=None, disp
                         "breakdown": dict(Counter(scores)),
                     })
                 else:
-                    translated_counter = Counter()
+                    translated = []
                     for row in filtered:
                         v = _cell_value(row, col_def["col"])
                         if not _is_meaningful(v):
@@ -281,14 +360,14 @@ def build_model(config, fetched_tabs, cutoff_dt, now_dt, translate_fn=None, disp
                             tv, _ = detect_and_translate(v, translate_fn)
                         else:
                             tv = v
-                        translated_counter[tv.strip()] += 1
-                    grouped = []
-                    for text, cnt in translated_counter.most_common():
-                        grouped.append({"text": text, "count": cnt})
+                        tv = tv.strip()
+                        if tv:
+                            translated.append(tv)
+                    grouped = _fuzzy_group(translated, gemini_key=gemini_key)
                     summaries.append({
                         "header": col_def["header"],
                         "type": "grouped",
-                        "total": sum(translated_counter.values()),
+                        "total": len(translated),
                         "groups": grouped,
                     })
             sections.append({

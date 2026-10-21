@@ -45,11 +45,14 @@ def main():
     google_sa_b64 = os.environ.get("GOOGLE_SA_KEY", "")
     gmail_user = os.environ.get("GMAIL_USER", "")
     gmail_password = os.environ.get("GMAIL_APP_PASSWORD", "")
+    gemini_key = os.environ.get("GOOGLE_API_KEY", "")
 
     if google_sa_b64:
         _mask(google_sa_b64)
     if gmail_password:
         _mask(gmail_password)
+    if gemini_key:
+        _mask(gemini_key)
 
     if not google_sa_b64:
         sys.exit("GOOGLE_SA_KEY not set")
@@ -81,7 +84,8 @@ def main():
             print(f"  failed: {e}")
 
     translate_fn = partial(translate_text, sa_info)
-    model = build_model(config, fetched_tabs, cutoff_dt, now_utc, translate_fn, display_tz=display_tz)
+    model = build_model(config, fetched_tabs, cutoff_dt, now_utc, translate_fn, display_tz=display_tz,
+                         gemini_key=gemini_key or None)
     subject, html = render(model)
 
     print(f"total new responses: {model['total']}")
