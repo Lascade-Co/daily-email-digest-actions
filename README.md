@@ -42,9 +42,6 @@ data/
 | `GMAIL_USER` | Gmail address for sending |
 | `GMAIL_APP_PASSWORD` | Gmail app password |
 
-## Recipients
-
-All digests send to: `angelrose@lascade.com`, `cherian@lascade.com`
 
 ## Manual Trigger
 
