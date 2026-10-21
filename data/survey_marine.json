@@ -12,10 +12,10 @@
       "render": "distribution",
       "columns": [
         {"col": 1, "header": "Looking for"},
-        {"col": 2, "header": "Find vessel"},
+        {"col": 2, "header": "Find vessel by"},
         {
           "col": 3,
-          "header": "Add to Fleet?",
+          "header": "Add to Fleet usage",
           "color_map": {
             "Yes, and I've already used it": "#2a8c4a",
             "Yes, but I haven't used it yet": "#c9922a",
@@ -33,7 +33,7 @@
         {"col": 1, "header": "Features used"},
         {
           "col": 2,
-          "header": "Vessel alerts?",
+          "header": "Vessel alerts usage",
           "color_map": {
             "Yes": "#2a8c4a",
             "Not yet, but I plan to": "#c9922a",
@@ -41,7 +41,7 @@
             "I didn't know about vessel alerts": "#888"
           }
         },
-        {"col": 3, "header": "Alert channel"}
+        {"col": 3, "header": "Alert channel preference"}
       ]
     },
     {
@@ -73,7 +73,7 @@
     },
     {
       "sheet_name": "Add your ship ",
-      "label": "Add Your Ship",
+      "label": "Missing Ships",
       "subtitle": "Submissions",
       "columns": [
         {"col": 1, "header": "Vessel", "bold_all": true},

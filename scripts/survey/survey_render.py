@@ -14,6 +14,7 @@ FH = "'Inter',system-ui,-apple-system,'Segoe UI',sans-serif"
 def render(model):
     """Return (subject, html)."""
     total = model["total"]
+    survey_count = model.get("survey_count", len(model["sections"]))
     sections = model["sections"]
     date_str = model["date_str"]
     cutoff_str = model["cutoff_str"]
@@ -22,7 +23,7 @@ def render(model):
     email_title = model["email_title"]
 
     subject = f"{product_name} Surveys — {total} new response{'s' if total != 1 else ''}"
-    preheader = f"{total} new survey response{'s' if total != 1 else ''}"
+    preheader = f"{total} new response{'s' if total != 1 else ''} from {survey_count} survey{'s' if survey_count != 1 else ''}"
 
     h = ""
 
@@ -80,7 +81,7 @@ def render(model):
     h += f'<p style="margin:0;font-family:{F};font-size:14px;line-height:1.5;color:#888;">'
     h += _esc(date_str) + " &nbsp;&middot;&nbsp; "
     h += '<span style="display:inline-block;background:#222;color:#fff;font-size:12px;font-weight:600;'
-    h += f'padding:2px 8px;border-radius:10px;">{total} response{"s" if total != 1 else ""}</span>'
+    h += f'padding:2px 8px;border-radius:10px;">{total} response{"s" if total != 1 else ""} from {survey_count} survey{"s" if survey_count != 1 else ""}</span>'
     h += "</p></td></tr>"
     h += f'<tr><td style="padding:4px 40px 0 40px;" class="body-cell">'
     h += f'<p style="margin:0;font-family:{F};font-size:12px;line-height:1.5;color:#aaa;">'

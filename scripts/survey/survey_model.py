@@ -480,6 +480,7 @@ def build_model(config, fetched_tabs, cutoff_dt, now_dt, translate_fn=None, disp
         "email_title": config.get("email_title", "Survey Responses"),
         "sections": sections,
         "total": total,
+        "survey_count": len(sections),
         "free_count": free_count,
         "pro_count": pro_count,
         "date_str": date_str,
