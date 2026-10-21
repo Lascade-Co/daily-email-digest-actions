@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Pure data layer: filter, detect language, build the email model. No I/O."""
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 
 try:
@@ -135,92 +136,190 @@ def build_model(config, fetched_tabs, cutoff_dt, now_dt, translate_fn=None, disp
         if not filtered:
             continue
 
+        render_mode = survey.get("render", "table")
         has_status = survey.get("has_status", global_status)
         status_col = survey.get("status_col", global_status_col)
         status_values = survey.get("status_values", {"pro": "Pro", "free": "Free"})
+        count = len(filtered)
+        total += count
 
-        rendered_rows = []
-        for row in filtered:
-            total += 1
-
-            status_label = None
-            status_color = None
-            if has_status:
+        if has_status:
+            for row in filtered:
                 status_raw = _cell_value(row, status_col).lower()
-                is_pro = status_raw in ("pro", "premium")
-                if is_pro:
+                if status_raw in ("pro", "premium"):
                     pro_count += 1
-                    status_label = status_values.get(status_raw, "Pro")
                 else:
                     free_count += 1
-                    status_label = status_values.get(status_raw, "Free")
-                status_color = "#5a5aad" if is_pro else "#888"
 
-            cells = []
+        if render_mode == "distribution":
+            distributions = []
             for col_def in survey["columns"]:
-                val = _cell_value(row, col_def["col"])
-                was_translated = False
-                if translate_fn and val:
-                    val, was_translated = detect_and_translate(val, translate_fn)
-
-                color = "#222"
-                bold = False
-                empty_text = col_def.get("empty_text")
-                empty_color = col_def.get("empty_color", "#aaa")
                 color_map = col_def.get("color_map", {})
-                bold_list = col_def.get("bold", [])
-                bold_all = col_def.get("bold_all", False)
-                is_score = col_def.get("is_score", False)
-
-                if not val and empty_text:
-                    val = empty_text
-                    color = empty_color
-                elif not val:
-                    val = "—"
-                    color = "#aaa"
-
-                if is_score and val:
-                    try:
-                        score = int(val)
-                        val = f"{score}/5"
-                        if score >= 4:
-                            color = "#2a8c4a"
-                        elif score == 3:
-                            color = "#c9922a"
-                        else:
-                            color = "#c0392b"
-                        bold = True
-                    except ValueError:
-                        pass
-
-                if val in color_map:
-                    color = color_map[val]
-                if bold_all:
-                    bold = True
-                elif isinstance(bold_list, list) and val in bold_list:
-                    bold = True
-
-                cells.append({
-                    "value": val,
-                    "color": color,
-                    "bold": bold,
-                    "translated": was_translated,
+                vals = [_cell_value(row, col_def["col"]) for row in filtered]
+                vals = [v for v in vals if v]
+                counter = Counter(vals)
+                options = []
+                for val, cnt in counter.most_common():
+                    pct = cnt / len(vals) * 100 if vals else 0
+                    options.append({
+                        "value": val,
+                        "count": cnt,
+                        "pct": round(pct, 1),
+                        "color": color_map.get(val, "#555"),
+                    })
+                distributions.append({
+                    "header": col_def["header"],
+                    "total": len(vals),
+                    "options": options,
                 })
-
-            rendered_rows.append({
-                "cells": cells,
-                "status_label": status_label,
-                "status_color": status_color,
+            sections.append({
+                "label": survey["label"],
+                "subtitle": survey["subtitle"],
+                "render": "distribution",
+                "count": count,
+                "distributions": distributions,
+                "has_status": False,
             })
 
-        sections.append({
-            "label": survey["label"],
-            "subtitle": survey["subtitle"],
-            "columns": [c["header"] for c in survey["columns"]],
-            "rows": rendered_rows,
-            "count": len(rendered_rows),
-            "has_status": has_status,
-        })
+        elif render_mode == "summary":
+            summaries = []
+            for col_def in survey["columns"]:
+                color_map = col_def.get("color_map", {})
+                is_score = col_def.get("is_score", False)
+                vals = [_cell_value(row, col_def["col"]) for row in filtered]
+                vals = [v for v in vals if v]
+
+                if color_map:
+                    counter = Counter(vals)
+                    options = []
+                    for val, cnt in counter.most_common():
+                        pct = cnt / len(vals) * 100 if vals else 0
+                        options.append({
+                            "value": val,
+                            "count": cnt,
+                            "pct": round(pct, 1),
+                            "color": color_map.get(val, "#555"),
+                        })
+                    summaries.append({
+                        "header": col_def["header"],
+                        "type": "distribution",
+                        "total": len(vals),
+                        "options": options,
+                    })
+                elif is_score:
+                    scores = []
+                    for v in vals:
+                        try:
+                            scores.append(int(v))
+                        except ValueError:
+                            pass
+                    avg = sum(scores) / len(scores) if scores else 0
+                    summaries.append({
+                        "header": col_def["header"],
+                        "type": "score",
+                        "avg": round(avg, 1),
+                        "total": len(scores),
+                        "breakdown": dict(Counter(scores)),
+                    })
+                else:
+                    translated = []
+                    for v in vals:
+                        if translate_fn:
+                            tv, was_t = detect_and_translate(v, translate_fn)
+                        else:
+                            tv, was_t = v, False
+                        translated.append({"text": tv, "translated": was_t})
+                    summaries.append({
+                        "header": col_def["header"],
+                        "type": "text",
+                        "responses": translated,
+                    })
+            sections.append({
+                "label": survey["label"],
+                "subtitle": survey["subtitle"],
+                "render": "summary",
+                "count": count,
+                "summaries": summaries,
+                "has_status": has_status,
+            })
+
+        else:
+            rendered_rows = []
+            for row in filtered:
+                status_label = None
+                status_color = None
+                if has_status:
+                    status_raw = _cell_value(row, status_col).lower()
+                    is_pro = status_raw in ("pro", "premium")
+                    status_label = status_values.get(status_raw, "Pro" if is_pro else "Free")
+                    status_color = "#5a5aad" if is_pro else "#888"
+
+                cells = []
+                for col_def in survey["columns"]:
+                    val = _cell_value(row, col_def["col"])
+                    was_translated = False
+                    if translate_fn and val:
+                        val, was_translated = detect_and_translate(val, translate_fn)
+
+                    color = "#222"
+                    bold = False
+                    empty_text = col_def.get("empty_text")
+                    empty_color = col_def.get("empty_color", "#aaa")
+                    color_map = col_def.get("color_map", {})
+                    bold_list = col_def.get("bold", [])
+                    bold_all = col_def.get("bold_all", False)
+                    is_score = col_def.get("is_score", False)
+
+                    if not val and empty_text:
+                        val = empty_text
+                        color = empty_color
+                    elif not val:
+                        val = "—"
+                        color = "#aaa"
+
+                    if is_score and val:
+                        try:
+                            score = int(val)
+                            val = f"{score}/5"
+                            if score >= 4:
+                                color = "#2a8c4a"
+                            elif score == 3:
+                                color = "#c9922a"
+                            else:
+                                color = "#c0392b"
+                            bold = True
+                        except ValueError:
+                            pass
+
+                    if val in color_map:
+                        color = color_map[val]
+                    if bold_all:
+                        bold = True
+                    elif isinstance(bold_list, list) and val in bold_list:
+                        bold = True
+
+                    cells.append({
+                        "value": val,
+                        "color": color,
+                        "bold": bold,
+                        "translated": was_translated,
+                    })
+
+                rendered_rows.append({
+                    "cells": cells,
+                    "status_label": status_label,
+                    "status_color": status_color,
+                })
+
+            sections.append({
+                "label": survey["label"],
+                "subtitle": survey["subtitle"],
+                "render": "table",
+                "columns": [c["header"] for c in survey["columns"]],
+                "rows": rendered_rows,
+                "count": len(rendered_rows),
+                "has_status": has_status,
+            })
 
     weekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     months = [

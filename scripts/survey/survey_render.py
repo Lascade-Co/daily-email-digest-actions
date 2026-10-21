@@ -90,11 +90,12 @@ def render(model):
     h += '<tr><td style="border-top:2px solid #222;font-size:1px;line-height:1px;">&nbsp;</td></tr></table></td></tr>'
     h += "</table>"
 
-    # ── Section tables ──
+    # ── Sections ──
     for si, sec in enumerate(sections):
         pad_top = "24" if si == 0 else "28"
-        has_status = sec["has_status"]
+        render_mode = sec.get("render", "table")
 
+        # Section header (shared by all modes)
         h += '<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color:#f5f3f1;">'
         h += f'<tr><td style="padding:{pad_top}px 40px 0 40px;" class="body-cell">'
         h += '<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"><tr>'
@@ -107,48 +108,14 @@ def render(model):
         h += f'{count} response{"s" if count != 1 else ""}</span></td>'
         h += "</tr></table></td></tr>"
 
-        # Data table
-        h += '<tr><td style="padding:10px 40px 0 40px;" class="body-cell">'
-        h += f'<table class="data-table" role="presentation" cellspacing="0" cellpadding="0" border="0" '
-        h += f'width="100%" style="background-color:#fff;border-radius:6px;font-family:{F};font-size:13px;line-height:1.4;color:#222;">'
+        if render_mode == "distribution":
+            h += _render_distribution(sec)
+        elif render_mode == "summary":
+            h += _render_summary(sec)
+        else:
+            h += _render_table(sec)
 
-        # Header row
-        h += "<tr>"
-        if has_status:
-            h += _th_cell("Status")
-        for col_header in sec["columns"]:
-            h += _th_cell(col_header)
-        h += "</tr>"
-
-        # Data rows
-        rows = sec["rows"]
-        for ri, row in enumerate(rows):
-            stripe = " background-color:#faf9f7;" if ri % 2 == 1 else ""
-            is_last = ri == len(rows) - 1
-            h += f'<tr{f" style={chr(34)}{stripe}{chr(34)}" if stripe else ""}>'
-
-            # Status cell (conditional)
-            if has_status:
-                sl = row.get("status_label") or "Free"
-                sc = row.get("status_color") or "#888"
-                bl_radius = "border-radius:0 0 0 6px;" if is_last else ""
-                h += f'<td style="padding:8px 14px;font-size:12px;font-weight:600;color:{sc};{bl_radius}">'
-                h += f"{_esc(sl)}</td>"
-
-            # Data cells
-            cells = row["cells"]
-            for ci, cell in enumerate(cells):
-                last_col = ci == len(cells) - 1
-                first_col = ci == 0 and not has_status
-                bl = "border-radius:0 0 0 6px;" if is_last and first_col else ""
-                br = "border-radius:0 0 6px 0;" if is_last and last_col else ""
-                weight = "font-weight:600;" if cell["bold"] else ""
-                h += f'<td style="padding:8px 14px;color:{cell["color"]};{weight}{bl}{br}">'
-                h += _esc(cell["value"]) + "</td>"
-
-            h += "</tr>"
-
-        h += "</table></td></tr></table>"
+        h += "</table>"
 
     # ── Footer ──
     h += '<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color:#f5f3f1;">'
@@ -171,6 +138,157 @@ def render(model):
     h += "</td></tr></table></body></html>"
 
     return subject, h
+
+
+def _render_distribution(sec):
+    """Render horizontal bar charts for each column's option distribution."""
+    h = ""
+    for dist in sec["distributions"]:
+        h += f'<tr><td style="padding:14px 40px 0 40px;" class="body-cell">'
+        h += f'<p style="margin:0;font-family:{FH};font-size:12px;font-weight:600;'
+        h += f'letter-spacing:0.03em;text-transform:uppercase;color:#888;">{_esc(dist["header"])}</p>'
+        h += '</td></tr>'
+        h += '<tr><td style="padding:6px 40px 0 40px;" class="body-cell">'
+        h += f'<table role="presentation" cellspacing="0" cellpadding="0" border="0" '
+        h += f'width="100%" style="background-color:#fff;border-radius:6px;font-family:{F};">'
+        for oi, opt in enumerate(dist["options"]):
+            pct = opt["pct"]
+            bar_w = max(pct, 2)
+            color = opt["color"]
+            is_last = oi == len(dist["options"]) - 1
+            bl = "border-radius:0 0 0 6px;" if is_last else ""
+            br = "border-radius:0 0 6px 0;" if is_last else ""
+            h += '<tr>'
+            h += f'<td style="padding:8px 14px;font-size:13px;color:#222;width:45%;{bl}">'
+            h += _esc(opt["value"]) + '</td>'
+            h += f'<td style="padding:8px 6px;width:35%;">'
+            h += f'<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"><tr>'
+            h += f'<td style="width:{bar_w}%;background-color:{color};height:8px;border-radius:4px;'
+            h += f'font-size:1px;line-height:1px;">&nbsp;</td>'
+            h += f'<td style="width:{100 - bar_w}%;font-size:1px;">&nbsp;</td>'
+            h += '</tr></table></td>'
+            h += f'<td style="padding:8px 14px;font-size:12px;color:#888;text-align:right;white-space:nowrap;{br}">'
+            h += f'{pct:.0f}% ({opt["count"]})</td>'
+            h += '</tr>'
+        h += '</table></td></tr>'
+    return h
+
+
+def _render_summary(sec):
+    """Render summary mode: distributions for color_map cols, translated bullets for text."""
+    h = ""
+    for summary in sec["summaries"]:
+        h += f'<tr><td style="padding:14px 40px 0 40px;" class="body-cell">'
+        h += f'<p style="margin:0;font-family:{FH};font-size:12px;font-weight:600;'
+        h += f'letter-spacing:0.03em;text-transform:uppercase;color:#888;">{_esc(summary["header"])}</p>'
+        h += '</td></tr>'
+
+        if summary["type"] == "distribution":
+            h += '<tr><td style="padding:6px 40px 0 40px;" class="body-cell">'
+            h += f'<table role="presentation" cellspacing="0" cellpadding="0" border="0" '
+            h += f'width="100%" style="background-color:#fff;border-radius:6px;font-family:{F};">'
+            for oi, opt in enumerate(summary["options"]):
+                pct = opt["pct"]
+                bar_w = max(pct, 2)
+                color = opt["color"]
+                is_last = oi == len(summary["options"]) - 1
+                bl = "border-radius:0 0 0 6px;" if is_last else ""
+                br = "border-radius:0 0 6px 0;" if is_last else ""
+                h += '<tr>'
+                h += f'<td style="padding:8px 14px;font-size:13px;color:#222;width:45%;{bl}">'
+                h += _esc(opt["value"]) + '</td>'
+                h += f'<td style="padding:8px 6px;width:35%;">'
+                h += f'<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"><tr>'
+                h += f'<td style="width:{bar_w}%;background-color:{color};height:8px;border-radius:4px;'
+                h += f'font-size:1px;line-height:1px;">&nbsp;</td>'
+                h += f'<td style="width:{100 - bar_w}%;font-size:1px;">&nbsp;</td>'
+                h += '</tr></table></td>'
+                h += f'<td style="padding:8px 14px;font-size:12px;color:#888;text-align:right;white-space:nowrap;{br}">'
+                h += f'{pct:.0f}% ({opt["count"]})</td>'
+                h += '</tr>'
+            h += '</table></td></tr>'
+
+        elif summary["type"] == "score":
+            avg = summary["avg"]
+            if avg >= 4:
+                sc = "#2a8c4a"
+            elif avg >= 3:
+                sc = "#c9922a"
+            else:
+                sc = "#c0392b"
+            h += f'<tr><td style="padding:6px 40px 0 40px;" class="body-cell">'
+            h += f'<table role="presentation" cellspacing="0" cellpadding="0" border="0" '
+            h += f'width="100%" style="background-color:#fff;border-radius:6px;font-family:{F};">'
+            h += f'<tr><td style="padding:14px 18px;text-align:center;">'
+            h += f'<span style="font-size:24px;font-weight:700;color:{sc};">{avg}/5</span>'
+            h += f'<span style="font-size:12px;color:#888;padding-left:8px;">avg from {summary["total"]} responses</span>'
+            h += '</td></tr></table></td></tr>'
+
+        elif summary["type"] == "text":
+            responses = summary["responses"]
+            h += '<tr><td style="padding:6px 40px 0 40px;" class="body-cell">'
+            h += f'<table role="presentation" cellspacing="0" cellpadding="0" border="0" '
+            h += f'width="100%" style="background-color:#fff;border-radius:6px;font-family:{F};font-size:13px;line-height:1.5;color:#222;">'
+            for ri, resp in enumerate(responses):
+                is_last = ri == len(responses) - 1
+                bl = "border-radius:0 0 0 6px;" if is_last else ""
+                br = "border-radius:0 0 6px 0;" if is_last else ""
+                stripe = " background-color:#faf9f7;" if ri % 2 == 1 else ""
+                translated_tag = ""
+                if resp["translated"]:
+                    translated_tag = (' <span style="font-size:10px;color:#bbb;font-style:italic;">'
+                                      'translated</span>')
+                h += f'<tr><td style="padding:8px 14px;{bl}{br}{stripe}">'
+                h += f'<span style="color:#888;font-size:12px;">&#8226;</span>&nbsp;'
+                h += _esc(resp["text"]) + translated_tag
+                h += '</td></tr>'
+            h += '</table></td></tr>'
+    return h
+
+
+def _render_table(sec):
+    """Render the original row-by-row table format."""
+    h = ""
+    has_status = sec["has_status"]
+
+    h += '<tr><td style="padding:10px 40px 0 40px;" class="body-cell">'
+    h += f'<table class="data-table" role="presentation" cellspacing="0" cellpadding="0" border="0" '
+    h += f'width="100%" style="background-color:#fff;border-radius:6px;font-family:{F};font-size:13px;line-height:1.4;color:#222;">'
+
+    h += "<tr>"
+    if has_status:
+        h += _th_cell("Status")
+    for col_header in sec["columns"]:
+        h += _th_cell(col_header)
+    h += "</tr>"
+
+    rows = sec["rows"]
+    for ri, row in enumerate(rows):
+        stripe = " background-color:#faf9f7;" if ri % 2 == 1 else ""
+        is_last = ri == len(rows) - 1
+        h += f'<tr{f" style={chr(34)}{stripe}{chr(34)}" if stripe else ""}>'
+
+        if has_status:
+            sl = row.get("status_label") or "Free"
+            sc = row.get("status_color") or "#888"
+            bl_radius = "border-radius:0 0 0 6px;" if is_last else ""
+            h += f'<td style="padding:8px 14px;font-size:12px;font-weight:600;color:{sc};{bl_radius}">'
+            h += f"{_esc(sl)}</td>"
+
+        cells = row["cells"]
+        for ci, cell in enumerate(cells):
+            last_col = ci == len(cells) - 1
+            first_col = ci == 0 and not has_status
+            bl = "border-radius:0 0 0 6px;" if is_last and first_col else ""
+            br = "border-radius:0 0 6px 0;" if is_last and last_col else ""
+            weight = "font-weight:600;" if cell["bold"] else ""
+            h += f'<td style="padding:8px 14px;color:{cell["color"]};{weight}{bl}{br}">'
+            h += _esc(cell["value"]) + "</td>"
+
+        h += "</tr>"
+
+    h += "</table></td></tr>"
+    return h
 
 
 def _th_cell(text):

@@ -9,6 +9,7 @@
       "sheet_name": "D2 Survey",
       "label": "Day 2",
       "subtitle": "First impressions",
+      "render": "distribution",
       "columns": [
         {"col": 1, "header": "Looking for"},
         {"col": 2, "header": "Find vessel"},
@@ -27,6 +28,7 @@
       "sheet_name": "D15 Survey",
       "label": "Day 15",
       "subtitle": "Feature usage",
+      "render": "summary",
       "columns": [
         {"col": 1, "header": "Features used"},
         {
@@ -85,6 +87,7 @@
       "sheet_name": "paywall close survey",
       "label": "Paywall Close",
       "subtitle": "Why users didn't upgrade",
+      "render": "distribution",
       "columns": [
         {
           "col": 1,
@@ -105,6 +108,7 @@
       "sheet_name": "Vessel Details Page",
       "label": "Vessel Details",
       "subtitle": "Page feedback",
+      "render": "summary",
       "columns": [
         {"col": 3, "header": "Matter"}
       ]
@@ -113,6 +117,7 @@
       "sheet_name": "Subscribers Survey",
       "label": "Subscribers",
       "subtitle": "Subscriber satisfaction",
+      "render": "summary",
       "columns": [
         {"col": 1, "header": "Motivation"},
         {"col": 2, "header": "Got value?"},
@@ -124,6 +129,7 @@
       "sheet_name": "Map Survey",
       "label": "Map Survey",
       "subtitle": "Feature requests",
+      "render": "summary",
       "has_status": true,
       "status_col": 4,
       "status_values": {"premium": "Premium", "free": "Free"},
