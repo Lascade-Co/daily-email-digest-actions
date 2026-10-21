@@ -1,4 +1,4 @@
-# Daily Email Digest Actions
+# Daily Email Digest Actions - MR, SR, GA
 
 Automated daily email digests via GitHub Actions — reviews, revenue, and survey responses.
 
