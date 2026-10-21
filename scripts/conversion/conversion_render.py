@@ -8,7 +8,10 @@ Conversion data is cohort-based: each install-date cohort has a conversion
 rate that grows over time as more users from that date convert to their
 first subscription.
 """
+import json
 from html import escape
+from urllib.parse import quote
+
 from conversion_model import format_pct, format_num, format_cohort_date
 
 F = "'Inter',system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',sans-serif"
@@ -24,12 +27,11 @@ def _rate_color(rate):
     return "#c0392b"
 
 
-def _bar_chart(app):
-    """Pure HTML/CSS bar chart of cohort conversion rates.
+def _line_chart(app):
+    """Line chart rendered as a PNG image via QuickChart.io.
 
-    Uses table cells with background-color for Gmail/Outlook compatibility.
-    Renders chronologically (oldest left, newest right) with the most recent
-    bar highlighted in the rate color and labeled.
+    QuickChart renders Chart.js configs server-side, returning a PNG that
+    works in every email client including Gmail and Outlook.
     """
     cohorts = app["cohorts"]
     if len(cohorts) < 2:
@@ -37,71 +39,71 @@ def _bar_chart(app):
 
     pts = list(reversed(cohorts))
     n = len(pts)
-    rates = [p["rate"] for p in pts]
+    labels = [format_cohort_date(p["date"]) for p in pts]
+    rates = [round(p["rate"], 2) for p in pts]
+    last_color = _rate_color(pts[-1]["rate"])
 
-    CHART_H = 80
-    MIN_FRAC = 0.2
+    pt_bg = ["#888"] * (n - 1) + [last_color]
+    pt_r = [2] * (n - 1) + [6]
+    pt_bc = ["#888"] * (n - 1) + ["#fff"]
+    pt_bw = [0] * (n - 1) + [2]
+    dl_display = [False] * (n - 1) + [True]
 
-    r_min, r_max = min(rates), max(rates)
-    r_range = r_max - r_min
+    config = {
+        "type": "line",
+        "data": {
+            "labels": labels,
+            "datasets": [{
+                "data": rates,
+                "borderColor": "#888",
+                "borderWidth": 1.5,
+                "pointBackgroundColor": pt_bg,
+                "pointRadius": pt_r,
+                "pointBorderColor": pt_bc,
+                "pointBorderWidth": pt_bw,
+                "fill": False,
+                "lineTension": 0.3,
+            }],
+        },
+        "options": {
+            "legend": {"display": False},
+            "scales": {
+                "yAxes": [{
+                    "ticks": {
+                        "callback": "__TICK_CB__",
+                        "fontColor": "#aaa",
+                        "fontSize": 10,
+                    },
+                    "gridLines": {"color": "#e8e6e3", "zeroLineColor": "#e8e6e3"},
+                }],
+                "xAxes": [{
+                    "ticks": {"maxTicksLimit": 5, "fontColor": "#aaa", "fontSize": 9},
+                    "gridLines": {"display": False},
+                }],
+            },
+            "plugins": {
+                "datalabels": {
+                    "display": dl_display,
+                    "align": "top",
+                    "color": last_color,
+                    "font": {"weight": "bold", "size": 12},
+                    "formatter": "__FMT_CB__",
+                },
+            },
+        },
+    }
 
-    if r_range < 0.01:
-        bar_heights = [int(CHART_H * 0.6)] * n
-    else:
-        bar_heights = []
-        for r in rates:
-            frac = MIN_FRAC + (1 - MIN_FRAC) * (r - r_min) / r_range
-            bar_heights.append(max(4, int(CHART_H * frac)))
+    cfg = json.dumps(config, separators=(",", ":"))
+    cfg = cfg.replace('"__TICK_CB__"', "function(v){return v.toFixed(1)+'%'}")
+    cfg = cfg.replace('"__FMT_CB__"', "function(v){return v.toFixed(1)+'%'}")
 
-    last_rate = pts[-1]["rate"]
-    last_color = _rate_color(last_rate)
-    bar_color = "#d0cdc9"
+    url = ("https://quickchart.io/chart?c=" + quote(cfg)
+           + "&amp;w=520&amp;h=150&amp;bkg=%23ffffff")
 
-    s = []
-    a = s.append
-
-    a(f'<table role="presentation" cellspacing="0" cellpadding="0" border="0" '
-      f'width="100%">')
-
-    # Bar row
-    a('<tr>')
-    for i, (pt, bh) in enumerate(zip(pts, bar_heights)):
-        is_last = (i == n - 1)
-        color = last_color if is_last else bar_color
-        spacer_h = CHART_H - bh
-
-        a(f'<td style="vertical-align:bottom;padding:0 1px;'
-          f'font-family:{FH};text-align:center;">')
-
-        a(f'<table role="presentation" cellspacing="0" cellpadding="0" '
-          f'border="0" width="100%">')
-        if is_last:
-            a(f'<tr><td style="padding:0 0 3px 0;text-align:center;">'
-              f'<p style="margin:0;font-family:{FH};font-size:10px;'
-              f'font-weight:700;color:{last_color};">'
-              f'{format_pct(last_rate)}%</p></td></tr>')
-        else:
-            a(f'<tr><td style="height:{spacer_h}px;font-size:1px;'
-              f'line-height:1px;">&nbsp;</td></tr>')
-        a(f'<tr><td style="height:{bh}px;background-color:{color};'
-          f'border-radius:3px 3px 0 0;font-size:1px;line-height:1px;">'
-          f'&nbsp;</td></tr>')
-        a('</table></td>')
-    a('</tr>')
-
-    # Date labels row
-    mid = n // 2
-    a('<tr>')
-    a(f'<td colspan="{mid}" style="padding:6px 0 0 0;text-align:left;">'
-      f'<p style="margin:0;font-family:{FH};font-size:9px;color:#aaa;">'
-      f'{escape(format_cohort_date(pts[0]["date"]))}</p></td>')
-    a(f'<td colspan="{n - mid}" style="padding:6px 0 0 0;text-align:right;">'
-      f'<p style="margin:0;font-family:{FH};font-size:9px;color:#aaa;">'
-      f'{escape(format_cohort_date(pts[-1]["date"]))}</p></td>')
-    a('</tr>')
-
-    a('</table>')
-    return "".join(s)
+    alt = f"{app['name']} conversion: {format_pct(pts[-1]['rate'])}%"
+    return (f'<img src="{url}" width="520" '
+            f'style="display:block;width:100%;height:auto;" '
+            f'alt="{escape(alt)}" />')
 
 
 def render(model):
@@ -282,7 +284,7 @@ def _cohort_section(app):
        f'<h2 class="email-h2" style="margin:0;font-family:{FH};font-size:18px;'
        f'font-weight:700;line-height:1.3;color:#222;">{escape(app["name"])}</h2>'
        f'</td></tr>')
-    chart = _bar_chart(app)
+    chart = _line_chart(app)
     if chart:
         _a(f'<tr><td style="padding:10px 40px 0 40px;" class="body-cell">'
            f'<table role="presentation" cellspacing="0" cellpadding="0" border="0" '
