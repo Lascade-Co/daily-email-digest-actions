@@ -161,7 +161,7 @@ def _llm_group(texts, gemini_key):
     }).encode()
     url = (
         "https://generativelanguage.googleapis.com/v1beta/models/"
-        "gemini-2.0-flash:generateContent?key=" + gemini_key
+        "gemini-3.5-flash-lite:generateContent?key=" + gemini_key
     )
     req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
     try:
