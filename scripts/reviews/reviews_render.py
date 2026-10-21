@@ -19,7 +19,7 @@ def render(model):
         (subject_line, html_body) tuple
     """
     m = model
-    subject = f"Reviews — {m['date_str']}"
+    subject = f"Reviews — {m['grand_total']} critical (≤{m.get('max_rating', 3)}★) — {m['date_str']}"
     html = _doc_open(m)
     html += _header(m)
     html += _rating_cards(m["apps"])
@@ -44,10 +44,12 @@ def render(model):
 
 def _doc_open(m):
     gt = m["grand_total"]
+    tf = m.get("total_fetched", gt)
+    mr = m.get("max_rating", 3)
     avg = m["overall_avg"]
     app_count = len(m["apps"])
-    preheader = (f"{gt} new review{'s' if gt != 1 else ''} across {app_count} apps"
-                 f" · Avg {avg:.1f}★")
+    preheader = (f"{gt} critical review{'s' if gt != 1 else ''} (≤{mr}★) from {tf} total"
+                 f" across {app_count} apps")
     h = ('<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" '
          '"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">'
          '<html xmlns="http://www.w3.org/1999/xhtml" lang="en" dir="ltr">'
@@ -86,12 +88,14 @@ def _doc_open(m):
 
 def _header(m):
     gt = m["grand_total"]
+    tf = m.get("total_fetched", gt)
+    mr = m.get("max_rating", 3)
     chips = ""
     for name in m["app_names"]:
         chips += (f'<span style="display:inline-block; font-family:{FONT}; font-size:12px; '
                   f'font-weight:600; color:#555; background:#e8e6e3; padding:3px 10px; '
                   f'border-radius:12px; margin-right:4px;">{esc(name)}</span>')
-    count_label = f'{gt} review{"s" if gt != 1 else ""}'
+    count_label = f'{gt} critical review{"s" if gt != 1 else ""} (&le;{mr}&#9733;) from {tf} total'
     h = (f'<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" '
          f'style="background-color:#f5f3f1;">'
          f'<tr><td style="padding:40px 40px 10px 40px;" class="body-cell">'

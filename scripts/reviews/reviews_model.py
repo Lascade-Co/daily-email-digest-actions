@@ -55,13 +55,22 @@ def build_model(apps_config, app_reviews, since_dt, now_dt, display_tz=None):
     """
     apps = []
     grand_total = 0
+    total_fetched = 0
     all_reviews = []
+
+    max_rating = 3
 
     for app_cfg in apps_config:
         name = app_cfg["name"]
         data = app_reviews.get(name, {"appstore": [], "playstore": []})
-        appstore = data.get("appstore", [])
-        playstore = data.get("playstore", [])
+        raw_appstore = data.get("appstore", [])
+        raw_playstore = data.get("playstore", [])
+
+        all_raw = raw_appstore + raw_playstore
+        total_fetched += len(all_raw)
+
+        appstore = [r for r in raw_appstore if r.get("rating", 5) <= max_rating]
+        playstore = [r for r in raw_playstore if r.get("rating", 5) <= max_rating]
 
         for r in appstore + playstore:
             lang = detect_language(r.get("body", ""))
@@ -83,6 +92,8 @@ def build_model(apps_config, app_reviews, since_dt, now_dt, display_tz=None):
         "apps": apps,
         "app_names": [a["name"] for a in apps_config],
         "grand_total": grand_total,
+        "total_fetched": total_fetched,
+        "max_rating": max_rating,
         "overall_avg": _avg_rating(all_reviews),
         "date_str": _format_date(now_dt.astimezone(display_tz) if display_tz else now_dt),
         "since_str": _format_short_date(since_dt.astimezone(display_tz) if display_tz else since_dt,
