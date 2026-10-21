@@ -1,0 +1,171 @@
+name: Daily Conversion Digest
+
+on:
+  schedule:
+    - cron: '30 0 * * *'     # IST slot — see data/email_config.json
+    - cron: '0 14 * * *'     # PST slot — see data/email_config.json
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Build the email without sending
+        type: boolean
+        default: false
+      to:
+        description: "Test: send [TEST] email to this address only"
+        type: string
+        default: ""
+      slot:
+        description: "Which timezone slot (ignored when 'to' is set)"
+        type: choice
+        options: [both, IST, PST]
+        default: both
+
+permissions:
+  contents: read
+
+concurrency:
+  group: conversion-${{ github.event.schedule || inputs.slot || 'manual' }}
+  cancel-in-progress: false
+
+env:
+  RAW: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      run_ist: ${{ steps.s.outputs.run_ist }}
+      run_pst: ${{ steps.s.outputs.run_pst }}
+      report_date: ${{ steps.s.outputs.report_date }}
+    steps:
+      - id: s
+        run: |
+          echo "report_date=$(date -u -d 'yesterday' +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            case "${{ github.event.schedule }}" in
+              "30 0 * * *")  echo "run_ist=true"  >> "$GITHUB_OUTPUT"; echo "run_pst=false" >> "$GITHUB_OUTPUT" ;;
+              "0 14 * * *")  echo "run_ist=false" >> "$GITHUB_OUTPUT"; echo "run_pst=true"  >> "$GITHUB_OUTPUT" ;;
+            esac
+          else
+            TO="${{ inputs.to }}"
+            SLOT="${{ inputs.slot }}"
+            if [ -n "$TO" ]; then
+              echo "run_ist=true"  >> "$GITHUB_OUTPUT"
+              echo "run_pst=false" >> "$GITHUB_OUTPUT"
+            elif [ "$SLOT" = "IST" ]; then
+              echo "run_ist=true"  >> "$GITHUB_OUTPUT"
+              echo "run_pst=false" >> "$GITHUB_OUTPUT"
+            elif [ "$SLOT" = "PST" ]; then
+              echo "run_ist=false" >> "$GITHUB_OUTPUT"
+              echo "run_pst=true"  >> "$GITHUB_OUTPUT"
+            else
+              echo "run_ist=true"  >> "$GITHUB_OUTPUT"
+              echo "run_pst=true"  >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+  email-ist:
+    needs: resolve
+    if: needs.resolve.outputs.run_ist == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      - name: Install dependencies
+        run: pip install --quiet requests==2.34.2
+
+      - name: Download scripts
+        run: |
+          for m in conversion_fetch conversion_model conversion_render conversion_main; do
+            curl -fsSL --retry 3 --retry-delay 2 -o "$m.py" "$RAW/scripts/conversion/$m.py"
+          done
+          curl -fsSL --retry 3 --retry-delay 2 -o conversion_apps.json "$RAW/data/conversion_apps.json"
+          curl -fsSL --retry 3 --retry-delay 2 -o email_config.json "$RAW/data/email_config.json"
+
+      - name: Load config
+        id: cfg
+        run: |
+          python3 -c "
+          import json, os
+          cfg = json.load(open('email_config.json'))
+          s = cfg['schedules']['ist']
+          d = cfg['digests']['conversion']
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write('recipients=' + ','.join(d['recipients']['ist']) + '\n')
+              f.write('tz=' + s['tz'] + '\n')
+              f.write('sender=' + d['sender'] + '\n')
+          "
+
+      - name: Send conversion digest (IST)
+        env:
+          ADAPTY_KEY_MARINERADAR: ${{ secrets.ADAPTY_KEY_MARINERADAR }}
+          ADAPTY_KEY_SMARTRULER: ${{ secrets.ADAPTY_KEY_SMARTRULER }}
+          ADAPTY_KEY_GEOANIMATOR: ${{ secrets.ADAPTY_KEY_GEOANIMATOR }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+        run: |
+          python3 conversion_main.py \
+            --report-date "${{ needs.resolve.outputs.report_date }}" \
+            --apps conversion_apps.json \
+            --recipients "${{ steps.cfg.outputs.recipients }}" \
+            --tz "${{ steps.cfg.outputs.tz }}" \
+            --sender "${{ steps.cfg.outputs.sender }}" \
+            ${{ inputs.dry_run && '--dry-run' || '' }} \
+            ${{ inputs.to && format('--to "{0}"', inputs.to) || '' }}
+
+  email-pst:
+    needs: resolve
+    if: needs.resolve.outputs.run_pst == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      - name: Install dependencies
+        run: pip install --quiet requests==2.34.2
+
+      - name: Download scripts
+        run: |
+          for m in conversion_fetch conversion_model conversion_render conversion_main; do
+            curl -fsSL --retry 3 --retry-delay 2 -o "$m.py" "$RAW/scripts/conversion/$m.py"
+          done
+          curl -fsSL --retry 3 --retry-delay 2 -o conversion_apps.json "$RAW/data/conversion_apps.json"
+          curl -fsSL --retry 3 --retry-delay 2 -o email_config.json "$RAW/data/email_config.json"
+
+      - name: Load config
+        id: cfg
+        run: |
+          python3 -c "
+          import json, os
+          cfg = json.load(open('email_config.json'))
+          s = cfg['schedules']['pst']
+          d = cfg['digests']['conversion']
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write('recipients=' + ','.join(d['recipients']['pst']) + '\n')
+              f.write('tz=' + s['tz'] + '\n')
+              f.write('sender=' + d['sender'] + '\n')
+          "
+
+      - name: Send conversion digest (PST)
+        env:
+          ADAPTY_KEY_MARINERADAR: ${{ secrets.ADAPTY_KEY_MARINERADAR }}
+          ADAPTY_KEY_SMARTRULER: ${{ secrets.ADAPTY_KEY_SMARTRULER }}
+          ADAPTY_KEY_GEOANIMATOR: ${{ secrets.ADAPTY_KEY_GEOANIMATOR }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+        run: |
+          python3 conversion_main.py \
+            --report-date "${{ needs.resolve.outputs.report_date }}" \
+            --apps conversion_apps.json \
+            --recipients "${{ steps.cfg.outputs.recipients }}" \
+            --tz "${{ steps.cfg.outputs.tz }}" \
+            --sender "${{ steps.cfg.outputs.sender }}" \
+            ${{ inputs.dry_run && '--dry-run' || '' }} \
+            ${{ inputs.to && format('--to "{0}"', inputs.to) || '' }}

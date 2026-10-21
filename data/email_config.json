@@ -46,6 +46,14 @@
         "ist": ["angelrose@lascade.com"],
         "pst": ["cherian@lascade.com"]
       }
+    },
+    "conversion": {
+      "subject": "Install → Paid Conversion Report",
+      "sender": "Lascade",
+      "recipients": {
+        "ist": ["angelrose@lascade.com"],
+        "pst": ["cherian@lascade.com"]
+      }
     }
   }
 }

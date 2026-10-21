@@ -1,0 +1,14 @@
+[
+  {
+    "name": "MarineRadar",
+    "api_key_env": "ADAPTY_KEY_MARINERADAR"
+  },
+  {
+    "name": "SmartRuler",
+    "api_key_env": "ADAPTY_KEY_SMARTRULER"
+  },
+  {
+    "name": "GeoAnimator",
+    "api_key_env": "ADAPTY_KEY_GEOANIMATOR"
+  }
+]
