@@ -16,6 +16,7 @@
 
   "digests": {
     "revenue": {
+      "subject": "Stripe Web Revenue — MarineRadar",
       "sender": "MarineRadar",
       "recipients": {
         "ist": ["angelrose@lascade.com"],
@@ -23,6 +24,7 @@
       }
     },
     "reviews": {
+      "subject": "App Reviews — 3★ or under",
       "sender": "App Reviews",
       "recipients": {
         "ist": ["angelrose@lascade.com"],
@@ -30,6 +32,7 @@
       }
     },
     "survey_marine": {
+      "subject": "Marine Radar Survey Responses",
       "sender": "MarineRadar",
       "recipients": {
         "ist": ["angelrose@lascade.com"],
@@ -37,6 +40,7 @@
       }
     },
     "survey_measure": {
+      "subject": "Smart Ruler Survey Responses",
       "sender": "Smart Ruler",
       "recipients": {
         "ist": ["angelrose@lascade.com"],
