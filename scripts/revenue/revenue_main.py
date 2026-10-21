@@ -34,6 +34,7 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--to", default="", help="Test mode: send [TEST] email to this address only")
     ap.add_argument("--tz", default="UTC", help="Display timezone (e.g. Asia/Kolkata, America/Los_Angeles)")
+    ap.add_argument("--sender", default="MarineRadar", help="Sender display name")
     a = ap.parse_args()
 
     display_tz = ZoneInfo(a.tz)
@@ -92,7 +93,7 @@ def main():
         sys.exit("Either --to or --recipients must be provided")
 
     msg = MIMEMultipart("alternative")
-    msg["From"] = f"MarineRadar <{gmail_user}>"
+    msg["From"] = f"{a.sender} <{gmail_user}>"
     msg["To"] = ", ".join(recipients)
     msg["Subject"] = f"{prefix}{subject}"
     msg.attach(MIMEText(html, "html"))

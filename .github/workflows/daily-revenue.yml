@@ -2,8 +2,8 @@ name: Daily Revenue Digest
 
 on:
   schedule:
-    - cron: '30 0 * * *'     # 6:00 AM IST → angelrose@lascade.com
-    - cron: '0 14 * * *'     # 6:00 AM PST → cherian@lascade.com
+    - cron: '30 0 * * *'     # IST slot — see data/email_config.json
+    - cron: '0 14 * * *'     # PST slot — see data/email_config.json
   workflow_dispatch:
     inputs:
       dry_run:
@@ -83,6 +83,21 @@ jobs:
           for m in revenue_fetch revenue_model revenue_render revenue_main; do
             curl -fsSL --retry 3 --retry-delay 2 -o "$m.py" "$RAW/scripts/revenue/$m.py"
           done
+          curl -fsSL --retry 3 --retry-delay 2 -o email_config.json "$RAW/data/email_config.json"
+
+      - name: Load config
+        id: cfg
+        run: |
+          python3 -c "
+          import json, os
+          cfg = json.load(open('email_config.json'))
+          s = cfg['schedules']['ist']
+          d = cfg['digests']['revenue']
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write('recipients=' + ','.join(s['recipients']) + '\n')
+              f.write('tz=' + s['tz'] + '\n')
+              f.write('sender=' + d['sender'] + '\n')
+          "
 
       - name: Send revenue digest (IST)
         env:
@@ -92,8 +107,9 @@ jobs:
         run: |
           python3 revenue_main.py \
             --report-date "${{ needs.resolve.outputs.report_date }}" \
-            --recipients "angelrose@lascade.com" \
-            --tz Asia/Kolkata \
+            --recipients "${{ steps.cfg.outputs.recipients }}" \
+            --tz "${{ steps.cfg.outputs.tz }}" \
+            --sender "${{ steps.cfg.outputs.sender }}" \
             ${{ inputs.dry_run && '--dry-run' || '' }} \
             ${{ inputs.to && format('--to "{0}"', inputs.to) || '' }}
 
@@ -116,6 +132,21 @@ jobs:
           for m in revenue_fetch revenue_model revenue_render revenue_main; do
             curl -fsSL --retry 3 --retry-delay 2 -o "$m.py" "$RAW/scripts/revenue/$m.py"
           done
+          curl -fsSL --retry 3 --retry-delay 2 -o email_config.json "$RAW/data/email_config.json"
+
+      - name: Load config
+        id: cfg
+        run: |
+          python3 -c "
+          import json, os
+          cfg = json.load(open('email_config.json'))
+          s = cfg['schedules']['pst']
+          d = cfg['digests']['revenue']
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write('recipients=' + ','.join(s['recipients']) + '\n')
+              f.write('tz=' + s['tz'] + '\n')
+              f.write('sender=' + d['sender'] + '\n')
+          "
 
       - name: Send revenue digest (PST)
         env:
@@ -125,7 +156,8 @@ jobs:
         run: |
           python3 revenue_main.py \
             --report-date "${{ needs.resolve.outputs.report_date }}" \
-            --recipients "cherian@lascade.com" \
-            --tz America/Los_Angeles \
+            --recipients "${{ steps.cfg.outputs.recipients }}" \
+            --tz "${{ steps.cfg.outputs.tz }}" \
+            --sender "${{ steps.cfg.outputs.sender }}" \
             ${{ inputs.dry_run && '--dry-run' || '' }} \
             ${{ inputs.to && format('--to "{0}"', inputs.to) || '' }}

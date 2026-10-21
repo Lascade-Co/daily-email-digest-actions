@@ -1,0 +1,33 @@
+{
+  "_doc": "Central config for all email digests. Edit this file to change recipients, sender names, or schedules. NOTE: cron values must also be updated in .github/workflows/*.yml (GitHub Actions requires them in YAML).",
+
+  "schedules": {
+    "ist": {
+      "cron": "30 0 * * *",
+      "label": "6:00 AM IST",
+      "tz": "Asia/Kolkata",
+      "recipients": ["angelrose@lascade.com"]
+    },
+    "pst": {
+      "cron": "0 14 * * *",
+      "label": "6:00 AM PST",
+      "tz": "America/Los_Angeles",
+      "recipients": ["cherian@lascade.com"]
+    }
+  },
+
+  "digests": {
+    "revenue": {
+      "sender": "MarineRadar"
+    },
+    "reviews": {
+      "sender": "App Reviews"
+    },
+    "survey_marine": {
+      "sender": "MarineRadar"
+    },
+    "survey_measure": {
+      "sender": "Smart Ruler"
+    }
+  }
+}

@@ -2,8 +2,8 @@ name: Daily Reviews Digest
 
 on:
   schedule:
-    - cron: '30 0 * * *'     # 6:00 AM IST → angelrose@lascade.com
-    - cron: '0 14 * * *'     # 6:00 AM PST → cherian@lascade.com
+    - cron: '30 0 * * *'     # IST slot — see data/email_config.json
+    - cron: '0 14 * * *'     # PST slot — see data/email_config.json
   workflow_dispatch:
     inputs:
       dry_run:
@@ -84,6 +84,21 @@ jobs:
             curl -fsSL --retry 3 --retry-delay 2 -o "$m.py" "$RAW/scripts/reviews/$m.py"
           done
           curl -fsSL --retry 3 --retry-delay 2 -o reviews_apps.json "$RAW/data/reviews_apps.json"
+          curl -fsSL --retry 3 --retry-delay 2 -o email_config.json "$RAW/data/email_config.json"
+
+      - name: Load config
+        id: cfg
+        run: |
+          python3 -c "
+          import json, os
+          cfg = json.load(open('email_config.json'))
+          s = cfg['schedules']['ist']
+          d = cfg['digests']['reviews']
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write('recipients=' + ','.join(s['recipients']) + '\n')
+              f.write('tz=' + s['tz'] + '\n')
+              f.write('sender=' + d['sender'] + '\n')
+          "
 
       - name: Send reviews digest (IST)
         env:
@@ -97,8 +112,9 @@ jobs:
           python3 reviews_main.py \
             --report-date "${{ needs.resolve.outputs.report_date }}" \
             --apps reviews_apps.json \
-            --recipients "angelrose@lascade.com" \
-            --tz Asia/Kolkata \
+            --recipients "${{ steps.cfg.outputs.recipients }}" \
+            --tz "${{ steps.cfg.outputs.tz }}" \
+            --sender "${{ steps.cfg.outputs.sender }}" \
             ${{ inputs.dry_run && '--dry-run' || '' }} \
             ${{ inputs.to && format('--to "{0}"', inputs.to) || '' }}
 
@@ -122,6 +138,21 @@ jobs:
             curl -fsSL --retry 3 --retry-delay 2 -o "$m.py" "$RAW/scripts/reviews/$m.py"
           done
           curl -fsSL --retry 3 --retry-delay 2 -o reviews_apps.json "$RAW/data/reviews_apps.json"
+          curl -fsSL --retry 3 --retry-delay 2 -o email_config.json "$RAW/data/email_config.json"
+
+      - name: Load config
+        id: cfg
+        run: |
+          python3 -c "
+          import json, os
+          cfg = json.load(open('email_config.json'))
+          s = cfg['schedules']['pst']
+          d = cfg['digests']['reviews']
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write('recipients=' + ','.join(s['recipients']) + '\n')
+              f.write('tz=' + s['tz'] + '\n')
+              f.write('sender=' + d['sender'] + '\n')
+          "
 
       - name: Send reviews digest (PST)
         env:
@@ -135,7 +166,8 @@ jobs:
           python3 reviews_main.py \
             --report-date "${{ needs.resolve.outputs.report_date }}" \
             --apps reviews_apps.json \
-            --recipients "cherian@lascade.com" \
-            --tz America/Los_Angeles \
+            --recipients "${{ steps.cfg.outputs.recipients }}" \
+            --tz "${{ steps.cfg.outputs.tz }}" \
+            --sender "${{ steps.cfg.outputs.sender }}" \
             ${{ inputs.dry_run && '--dry-run' || '' }} \
             ${{ inputs.to && format('--to "{0}"', inputs.to) || '' }}

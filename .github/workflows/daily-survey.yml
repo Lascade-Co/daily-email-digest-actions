@@ -2,8 +2,8 @@ name: Daily Survey Digest
 
 on:
   schedule:
-    - cron: '30 0 * * *'     # 6:00 AM IST → angelrose@lascade.com
-    - cron: '0 14 * * *'     # 6:00 AM PST → cherian@lascade.com
+    - cron: '30 0 * * *'     # IST slot — see data/email_config.json
+    - cron: '0 14 * * *'     # PST slot — see data/email_config.json
   workflow_dispatch:
     inputs:
       dry_run:
@@ -85,6 +85,21 @@ jobs:
           done
           curl -fsSL --retry 3 --retry-delay 2 -o survey_marine.json "$RAW/data/survey_marine.json"
           curl -fsSL --retry 3 --retry-delay 2 -o survey_measure.json "$RAW/data/survey_measure.json"
+          curl -fsSL --retry 3 --retry-delay 2 -o email_config.json "$RAW/data/email_config.json"
+
+      - name: Load config
+        id: cfg
+        run: |
+          python3 -c "
+          import json, os
+          cfg = json.load(open('email_config.json'))
+          s = cfg['schedules']['ist']
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write('recipients=' + ','.join(s['recipients']) + '\n')
+              f.write('tz=' + s['tz'] + '\n')
+              f.write('sender_marine=' + cfg['digests']['survey_marine']['sender'] + '\n')
+              f.write('sender_measure=' + cfg['digests']['survey_measure']['sender'] + '\n')
+          "
 
       - name: Send Marine Radar survey digest (IST)
         env:
@@ -96,8 +111,9 @@ jobs:
           python3 survey_main.py \
             --report-date "${{ needs.resolve.outputs.report_date }}" \
             --config survey_marine.json \
-            --recipients "angelrose@lascade.com" \
-            --tz Asia/Kolkata \
+            --recipients "${{ steps.cfg.outputs.recipients }}" \
+            --tz "${{ steps.cfg.outputs.tz }}" \
+            --sender "${{ steps.cfg.outputs.sender_marine }}" \
             ${{ inputs.dry_run && '--dry-run' || '' }} \
             ${{ inputs.to && format('--to "{0}"', inputs.to) || '' }}
 
@@ -111,8 +127,9 @@ jobs:
           python3 survey_main.py \
             --report-date "${{ needs.resolve.outputs.report_date }}" \
             --config survey_measure.json \
-            --recipients "angelrose@lascade.com" \
-            --tz Asia/Kolkata \
+            --recipients "${{ steps.cfg.outputs.recipients }}" \
+            --tz "${{ steps.cfg.outputs.tz }}" \
+            --sender "${{ steps.cfg.outputs.sender_measure }}" \
             ${{ inputs.dry_run && '--dry-run' || '' }} \
             ${{ inputs.to && format('--to "{0}"', inputs.to) || '' }}
 
@@ -137,6 +154,21 @@ jobs:
           done
           curl -fsSL --retry 3 --retry-delay 2 -o survey_marine.json "$RAW/data/survey_marine.json"
           curl -fsSL --retry 3 --retry-delay 2 -o survey_measure.json "$RAW/data/survey_measure.json"
+          curl -fsSL --retry 3 --retry-delay 2 -o email_config.json "$RAW/data/email_config.json"
+
+      - name: Load config
+        id: cfg
+        run: |
+          python3 -c "
+          import json, os
+          cfg = json.load(open('email_config.json'))
+          s = cfg['schedules']['pst']
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write('recipients=' + ','.join(s['recipients']) + '\n')
+              f.write('tz=' + s['tz'] + '\n')
+              f.write('sender_marine=' + cfg['digests']['survey_marine']['sender'] + '\n')
+              f.write('sender_measure=' + cfg['digests']['survey_measure']['sender'] + '\n')
+          "
 
       - name: Send Marine Radar survey digest (PST)
         env:
@@ -148,8 +180,9 @@ jobs:
           python3 survey_main.py \
             --report-date "${{ needs.resolve.outputs.report_date }}" \
             --config survey_marine.json \
-            --recipients "cherian@lascade.com" \
-            --tz America/Los_Angeles \
+            --recipients "${{ steps.cfg.outputs.recipients }}" \
+            --tz "${{ steps.cfg.outputs.tz }}" \
+            --sender "${{ steps.cfg.outputs.sender_marine }}" \
             ${{ inputs.dry_run && '--dry-run' || '' }} \
             ${{ inputs.to && format('--to "{0}"', inputs.to) || '' }}
 
@@ -163,7 +196,8 @@ jobs:
           python3 survey_main.py \
             --report-date "${{ needs.resolve.outputs.report_date }}" \
             --config survey_measure.json \
-            --recipients "cherian@lascade.com" \
-            --tz America/Los_Angeles \
+            --recipients "${{ steps.cfg.outputs.recipients }}" \
+            --tz "${{ steps.cfg.outputs.tz }}" \
+            --sender "${{ steps.cfg.outputs.sender_measure }}" \
             ${{ inputs.dry_run && '--dry-run' || '' }} \
             ${{ inputs.to && format('--to "{0}"', inputs.to) || '' }}
