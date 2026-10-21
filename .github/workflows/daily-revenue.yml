@@ -93,6 +93,7 @@ jobs:
           python3 revenue_main.py \
             --report-date "${{ needs.resolve.outputs.report_date }}" \
             --recipients "angelrose@lascade.com" \
+            --tz Asia/Kolkata \
             ${{ inputs.dry_run && '--dry-run' || '' }} \
             ${{ inputs.to && format('--to "{0}"', inputs.to) || '' }}
 
@@ -125,5 +126,6 @@ jobs:
           python3 revenue_main.py \
             --report-date "${{ needs.resolve.outputs.report_date }}" \
             --recipients "cherian@lascade.com" \
+            --tz America/Los_Angeles \
             ${{ inputs.dry_run && '--dry-run' || '' }} \
             ${{ inputs.to && format('--to "{0}"', inputs.to) || '' }}

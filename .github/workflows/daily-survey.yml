@@ -96,6 +96,7 @@ jobs:
             --report-date "${{ needs.resolve.outputs.report_date }}" \
             --config survey_marine.json \
             --recipients "angelrose@lascade.com" \
+            --tz Asia/Kolkata \
             ${{ inputs.dry_run && '--dry-run' || '' }} \
             ${{ inputs.to && format('--to "{0}"', inputs.to) || '' }}
 
@@ -109,6 +110,7 @@ jobs:
             --report-date "${{ needs.resolve.outputs.report_date }}" \
             --config survey_measure.json \
             --recipients "angelrose@lascade.com" \
+            --tz Asia/Kolkata \
             ${{ inputs.dry_run && '--dry-run' || '' }} \
             ${{ inputs.to && format('--to "{0}"', inputs.to) || '' }}
 
@@ -144,6 +146,7 @@ jobs:
             --report-date "${{ needs.resolve.outputs.report_date }}" \
             --config survey_marine.json \
             --recipients "cherian@lascade.com" \
+            --tz America/Los_Angeles \
             ${{ inputs.dry_run && '--dry-run' || '' }} \
             ${{ inputs.to && format('--to "{0}"', inputs.to) || '' }}
 
@@ -157,5 +160,6 @@ jobs:
             --report-date "${{ needs.resolve.outputs.report_date }}" \
             --config survey_measure.json \
             --recipients "cherian@lascade.com" \
+            --tz America/Los_Angeles \
             ${{ inputs.dry_run && '--dry-run' || '' }} \
             ${{ inputs.to && format('--to "{0}"', inputs.to) || '' }}

@@ -14,6 +14,7 @@ import os
 import smtplib
 import sys
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from functools import partial
@@ -36,7 +37,10 @@ def main():
     ap.add_argument("--recipients", default="", help="Comma-separated production recipients")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--to", default="", help="Test mode: send [TEST] email to this address only")
+    ap.add_argument("--tz", default="UTC", help="Display timezone (e.g. Asia/Kolkata, America/Los_Angeles)")
     a = ap.parse_args()
+
+    display_tz = ZoneInfo(a.tz)
 
     google_sa_b64 = os.environ.get("GOOGLE_SA_KEY", "")
     gmail_user = os.environ.get("GMAIL_USER", "")
@@ -77,7 +81,7 @@ def main():
             print(f"  failed: {e}")
 
     translate_fn = partial(translate_text, sa_info)
-    model = build_model(config, fetched_tabs, cutoff_dt, now_utc, translate_fn)
+    model = build_model(config, fetched_tabs, cutoff_dt, now_utc, translate_fn, display_tz=display_tz)
     subject, html = render(model)
 
     print(f"total new responses: {model['total']}")

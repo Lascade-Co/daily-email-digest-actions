@@ -113,7 +113,7 @@ def _cell_value(row, col_index):
     return ""
 
 
-def build_model(config, fetched_tabs, cutoff_dt, now_dt, translate_fn=None):
+def build_model(config, fetched_tabs, cutoff_dt, now_dt, translate_fn=None, display_tz=None):
     """Build the template model from config + raw sheet data.
 
     Supports two status patterns:
@@ -230,11 +230,15 @@ def build_model(config, fetched_tabs, cutoff_dt, now_dt, translate_fn=None):
     short_months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
                     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
-    date_str = f"{weekdays[now_dt.weekday()]}, {now_dt.day} {months[now_dt.month - 1]} {now_dt.year}"
+    disp_now = now_dt.astimezone(display_tz) if display_tz else now_dt
+    disp_cutoff = cutoff_dt.astimezone(display_tz) if display_tz else cutoff_dt
+    tz_label = f" {disp_cutoff.strftime('%Z')}" if display_tz else ""
 
-    cutoff_h = cutoff_dt.hour % 12 or 12
-    cutoff_ampm = "AM" if cutoff_dt.hour < 12 else "PM"
-    cutoff_str = f"{cutoff_dt.day} {short_months[cutoff_dt.month - 1]} {cutoff_h}:{cutoff_dt.minute:02d} {cutoff_ampm}"
+    date_str = f"{weekdays[disp_now.weekday()]}, {disp_now.day} {months[disp_now.month - 1]} {disp_now.year}"
+
+    cutoff_h = disp_cutoff.hour % 12 or 12
+    cutoff_ampm = "AM" if disp_cutoff.hour < 12 else "PM"
+    cutoff_str = f"{disp_cutoff.day} {short_months[disp_cutoff.month - 1]} {cutoff_h}:{disp_cutoff.minute:02d} {cutoff_ampm}{tz_label}"
 
     return {
         "product_name": config.get("product_name", "Survey"),

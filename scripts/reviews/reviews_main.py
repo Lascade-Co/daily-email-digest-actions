@@ -13,6 +13,7 @@ import os
 import smtplib
 import sys
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -34,7 +35,10 @@ def main():
     ap.add_argument("--recipients", default="", help="Comma-separated production recipients")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--to", default="", help="Test mode: send [TEST] email to this address only")
+    ap.add_argument("--tz", default="UTC", help="Display timezone (e.g. Asia/Kolkata, America/Los_Angeles)")
     a = ap.parse_args()
+
+    display_tz = ZoneInfo(a.tz)
 
     asc_key_id = os.environ.get("ASC_KEY_ID", "")
     asc_issuer_id = os.environ.get("ASC_ISSUER_ID", "")
@@ -89,7 +93,7 @@ def main():
 
         app_reviews[name] = {"appstore": appstore, "playstore": playstore}
 
-    model = build_model(apps_config, app_reviews, since_dt, now_utc)
+    model = build_model(apps_config, app_reviews, since_dt, now_utc, display_tz=display_tz)
     subject, html = render(model)
 
     print(f"grand total: {model['grand_total']} reviews")

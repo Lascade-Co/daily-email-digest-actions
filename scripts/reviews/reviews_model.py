@@ -32,15 +32,16 @@ def _format_date(dt):
     return f"{day_name}, {dt.day} {MONTHS[dt.month - 1]} {dt.year}"
 
 
-def _format_short_date(dt):
-    """'20 Oct 1:00 PM'"""
+def _format_short_date(dt, tz_label=None):
+    """'20 Oct 1:00 PM IST'"""
     h = dt.hour
     ampm = "PM" if h >= 12 else "AM"
     h = h % 12 or 12
-    return f"{dt.day} {SHORT_MONTHS[dt.month - 1]} {h}:{dt.minute:02d} {ampm}"
+    suffix = f" {dt.strftime('%Z')}" if tz_label else ""
+    return f"{dt.day} {SHORT_MONTHS[dt.month - 1]} {h}:{dt.minute:02d} {ampm}{suffix}"
 
 
-def build_model(apps_config, app_reviews, since_dt, now_dt):
+def build_model(apps_config, app_reviews, since_dt, now_dt, display_tz=None):
     """Build the email model from fetched reviews.
 
     Args:
@@ -83,6 +84,7 @@ def build_model(apps_config, app_reviews, since_dt, now_dt):
         "app_names": [a["name"] for a in apps_config],
         "grand_total": grand_total,
         "overall_avg": _avg_rating(all_reviews),
-        "date_str": _format_date(now_dt),
-        "since_str": _format_short_date(since_dt),
+        "date_str": _format_date(now_dt.astimezone(display_tz) if display_tz else now_dt),
+        "since_str": _format_short_date(since_dt.astimezone(display_tz) if display_tz else since_dt,
+                                         tz_label=display_tz),
     }

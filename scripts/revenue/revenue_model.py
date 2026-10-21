@@ -12,7 +12,7 @@ def _sum_cents(items):
     return sum(c["amount_cents"] for c in items)
 
 
-def build_model(today_charges, today_refunds, month_charges, month_refunds, now_dt, cutoff_dt):
+def build_model(today_charges, today_refunds, month_charges, month_refunds, now_dt, cutoff_dt, display_tz=None):
     """Build the template model dict from raw charge/refund lists.
 
     All monetary values are in dollars (float). Counts are ints.
@@ -42,10 +42,14 @@ def build_model(today_charges, today_refunds, month_charges, month_refunds, now_
     short_months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
                     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
-    date_str = f"{days[now_dt.weekday()]}, {now_dt.day} {months[now_dt.month - 1]} {now_dt.year}"
-    cutoff_hour = cutoff_dt.hour % 12 or 12
-    cutoff_ampm = "AM" if cutoff_dt.hour < 12 else "PM"
-    cutoff_str = f"{cutoff_dt.day} {short_months[cutoff_dt.month - 1]} {cutoff_hour}:{cutoff_dt.minute:02d} {cutoff_ampm}"
+    disp_now = now_dt.astimezone(display_tz) if display_tz else now_dt
+    disp_cutoff = cutoff_dt.astimezone(display_tz) if display_tz else cutoff_dt
+    tz_label = f" {disp_cutoff.strftime('%Z')}" if display_tz else ""
+
+    date_str = f"{days[disp_now.weekday()]}, {disp_now.day} {months[disp_now.month - 1]} {disp_now.year}"
+    cutoff_hour = disp_cutoff.hour % 12 or 12
+    cutoff_ampm = "AM" if disp_cutoff.hour < 12 else "PM"
+    cutoff_str = f"{disp_cutoff.day} {short_months[disp_cutoff.month - 1]} {cutoff_hour}:{disp_cutoff.minute:02d} {cutoff_ampm}{tz_label}"
 
     month_label = f"1–{now_dt.day} {short_months[now_dt.month - 1]} {now_dt.year}"
 
