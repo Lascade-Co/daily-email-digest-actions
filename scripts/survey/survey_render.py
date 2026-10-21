@@ -224,25 +224,31 @@ def _render_summary(sec):
             h += f'<span style="font-size:12px;color:#888;padding-left:8px;">avg from {summary["total"]} responses</span>'
             h += '</td></tr></table></td></tr>'
 
-        elif summary["type"] == "text":
-            responses = summary["responses"]
-            h += '<tr><td style="padding:6px 40px 0 40px;" class="body-cell">'
-            h += f'<table role="presentation" cellspacing="0" cellpadding="0" border="0" '
-            h += f'width="100%" style="background-color:#fff;border-radius:6px;font-family:{F};font-size:13px;line-height:1.5;color:#222;">'
-            for ri, resp in enumerate(responses):
-                is_last = ri == len(responses) - 1
-                bl = "border-radius:0 0 0 6px;" if is_last else ""
-                br = "border-radius:0 0 6px 0;" if is_last else ""
-                stripe = " background-color:#faf9f7;" if ri % 2 == 1 else ""
-                translated_tag = ""
-                if resp["translated"]:
-                    translated_tag = (' <span style="font-size:10px;color:#bbb;font-style:italic;">'
-                                      'translated</span>')
-                h += f'<tr><td style="padding:8px 14px;{bl}{br}{stripe}">'
-                h += f'<span style="color:#888;font-size:12px;">&#8226;</span>&nbsp;'
-                h += _esc(resp["text"]) + translated_tag
+        elif summary["type"] == "grouped":
+            groups = summary["groups"]
+            if not groups:
+                h += '<tr><td style="padding:6px 40px 0 40px;" class="body-cell">'
+                h += f'<p style="margin:0;font-family:{F};font-size:13px;color:#aaa;font-style:italic;">No meaningful responses</p>'
                 h += '</td></tr>'
-            h += '</table></td></tr>'
+            else:
+                h += '<tr><td style="padding:6px 40px 0 40px;" class="body-cell">'
+                h += f'<table role="presentation" cellspacing="0" cellpadding="0" border="0" '
+                h += f'width="100%" style="background-color:#fff;border-radius:6px;font-family:{F};font-size:13px;line-height:1.5;color:#222;">'
+                for gi, grp in enumerate(groups):
+                    is_last = gi == len(groups) - 1
+                    bl = "border-radius:0 0 0 6px;" if is_last else ""
+                    br = "border-radius:0 0 6px 0;" if is_last else ""
+                    stripe = " background-color:#faf9f7;" if gi % 2 == 1 else ""
+                    count_badge = ""
+                    if grp["count"] > 1:
+                        count_badge = (f' <span style="display:inline-block;background:#e8e6e3;'
+                                       f'font-size:10px;font-weight:600;color:#555;padding:1px 6px;'
+                                       f'border-radius:8px;margin-left:4px;">&times;{grp["count"]}</span>')
+                    h += f'<tr><td style="padding:8px 14px;{bl}{br}{stripe}">'
+                    h += f'<span style="color:#888;font-size:12px;">&#8226;</span>&nbsp;'
+                    h += _esc(grp["text"]) + count_badge
+                    h += '</td></tr>'
+                h += '</table></td></tr>'
     return h
 
 

@@ -114,6 +114,49 @@ def _cell_value(row, col_index):
     return ""
 
 
+import re
+
+_OTHER_RE = re.compile(r"^other\b", re.IGNORECASE)
+_LOW_VALUE = {"", "—", "-", "n/a", "na", "none", "no", "nothing", "nil", ".", "ok", "good"}
+
+
+def _split_multi(val, color_map=None):
+    """Split a multi-choice response into individual options.
+
+    Google Forms stores checkbox answers as 'Option A, Option B'.
+    If a color_map is provided and the whole value matches a key, return it as-is.
+    Normalise 'Other: free text' → 'Other'.
+    """
+    if not val:
+        return []
+    if color_map and val in color_map:
+        return [val]
+    parts = [p.strip() for p in val.split(",")]
+    out = []
+    for p in parts:
+        if not p:
+            continue
+        if _OTHER_RE.match(p):
+            out.append("Other")
+        elif color_map:
+            matched = False
+            for key in color_map:
+                if p.lower() == key.lower():
+                    out.append(key)
+                    matched = True
+                    break
+            if not matched:
+                out.append(p)
+        else:
+            out.append(p)
+    return out
+
+
+def _is_meaningful(text):
+    """Return True if a free-text response carries signal."""
+    return text.strip().lower() not in _LOW_VALUE and len(text.strip()) > 2
+
+
 def build_model(config, fetched_tabs, cutoff_dt, now_dt, translate_fn=None, display_tz=None):
     """Build the template model from config + raw sheet data.
 
@@ -155,12 +198,15 @@ def build_model(config, fetched_tabs, cutoff_dt, now_dt, translate_fn=None, disp
             distributions = []
             for col_def in survey["columns"]:
                 color_map = col_def.get("color_map", {})
-                vals = [_cell_value(row, col_def["col"]) for row in filtered]
-                vals = [v for v in vals if v]
-                counter = Counter(vals)
+                counter = Counter()
+                for row in filtered:
+                    val = _cell_value(row, col_def["col"])
+                    for part in _split_multi(val, color_map):
+                        counter[part] += 1
+                total_picks = sum(counter.values())
                 options = []
                 for val, cnt in counter.most_common():
-                    pct = cnt / len(vals) * 100 if vals else 0
+                    pct = cnt / total_picks * 100 if total_picks else 0
                     options.append({
                         "value": val,
                         "count": cnt,
@@ -169,7 +215,7 @@ def build_model(config, fetched_tabs, cutoff_dt, now_dt, translate_fn=None, disp
                     })
                 distributions.append({
                     "header": col_def["header"],
-                    "total": len(vals),
+                    "total": total_picks,
                     "options": options,
                 })
             sections.append({
@@ -186,14 +232,17 @@ def build_model(config, fetched_tabs, cutoff_dt, now_dt, translate_fn=None, disp
             for col_def in survey["columns"]:
                 color_map = col_def.get("color_map", {})
                 is_score = col_def.get("is_score", False)
-                vals = [_cell_value(row, col_def["col"]) for row in filtered]
-                vals = [v for v in vals if v]
 
                 if color_map:
-                    counter = Counter(vals)
+                    counter = Counter()
+                    for row in filtered:
+                        val = _cell_value(row, col_def["col"])
+                        for part in _split_multi(val, color_map):
+                            counter[part] += 1
+                    total_picks = sum(counter.values())
                     options = []
                     for val, cnt in counter.most_common():
-                        pct = cnt / len(vals) * 100 if vals else 0
+                        pct = cnt / total_picks * 100 if total_picks else 0
                         options.append({
                             "value": val,
                             "count": cnt,
@@ -203,12 +252,13 @@ def build_model(config, fetched_tabs, cutoff_dt, now_dt, translate_fn=None, disp
                     summaries.append({
                         "header": col_def["header"],
                         "type": "distribution",
-                        "total": len(vals),
+                        "total": total_picks,
                         "options": options,
                     })
                 elif is_score:
                     scores = []
-                    for v in vals:
+                    for row in filtered:
+                        v = _cell_value(row, col_def["col"])
                         try:
                             scores.append(int(v))
                         except ValueError:
@@ -222,17 +272,24 @@ def build_model(config, fetched_tabs, cutoff_dt, now_dt, translate_fn=None, disp
                         "breakdown": dict(Counter(scores)),
                     })
                 else:
-                    translated = []
-                    for v in vals:
+                    translated_counter = Counter()
+                    for row in filtered:
+                        v = _cell_value(row, col_def["col"])
+                        if not _is_meaningful(v):
+                            continue
                         if translate_fn:
-                            tv, was_t = detect_and_translate(v, translate_fn)
+                            tv, _ = detect_and_translate(v, translate_fn)
                         else:
-                            tv, was_t = v, False
-                        translated.append({"text": tv, "translated": was_t})
+                            tv = v
+                        translated_counter[tv.strip()] += 1
+                    grouped = []
+                    for text, cnt in translated_counter.most_common():
+                        grouped.append({"text": text, "count": cnt})
                     summaries.append({
                         "header": col_def["header"],
-                        "type": "text",
-                        "responses": translated,
+                        "type": "grouped",
+                        "total": sum(translated_counter.values()),
+                        "groups": grouped,
                     })
             sections.append({
                 "label": survey["label"],
