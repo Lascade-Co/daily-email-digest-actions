@@ -94,7 +94,7 @@ jobs:
           s = cfg['schedules']['ist']
           d = cfg['digests']['revenue']
           with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-              f.write('recipients=' + ','.join(s['recipients']) + '\n')
+              f.write('recipients=' + ','.join(d['recipients']['ist']) + '\n')
               f.write('tz=' + s['tz'] + '\n')
               f.write('sender=' + d['sender'] + '\n')
           "
@@ -143,7 +143,7 @@ jobs:
           s = cfg['schedules']['pst']
           d = cfg['digests']['revenue']
           with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-              f.write('recipients=' + ','.join(s['recipients']) + '\n')
+              f.write('recipients=' + ','.join(d['recipients']['pst']) + '\n')
               f.write('tz=' + s['tz'] + '\n')
               f.write('sender=' + d['sender'] + '\n')
           "

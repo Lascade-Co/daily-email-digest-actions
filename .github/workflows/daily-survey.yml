@@ -94,11 +94,14 @@ jobs:
           import json, os
           cfg = json.load(open('email_config.json'))
           s = cfg['schedules']['ist']
+          dm = cfg['digests']['survey_marine']
+          ds = cfg['digests']['survey_measure']
           with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-              f.write('recipients=' + ','.join(s['recipients']) + '\n')
               f.write('tz=' + s['tz'] + '\n')
-              f.write('sender_marine=' + cfg['digests']['survey_marine']['sender'] + '\n')
-              f.write('sender_measure=' + cfg['digests']['survey_measure']['sender'] + '\n')
+              f.write('recipients_marine=' + ','.join(dm['recipients']['ist']) + '\n')
+              f.write('sender_marine=' + dm['sender'] + '\n')
+              f.write('recipients_measure=' + ','.join(ds['recipients']['ist']) + '\n')
+              f.write('sender_measure=' + ds['sender'] + '\n')
           "
 
       - name: Send Marine Radar survey digest (IST)
@@ -111,7 +114,7 @@ jobs:
           python3 survey_main.py \
             --report-date "${{ needs.resolve.outputs.report_date }}" \
             --config survey_marine.json \
-            --recipients "${{ steps.cfg.outputs.recipients }}" \
+            --recipients "${{ steps.cfg.outputs.recipients_marine }}" \
             --tz "${{ steps.cfg.outputs.tz }}" \
             --sender "${{ steps.cfg.outputs.sender_marine }}" \
             ${{ inputs.dry_run && '--dry-run' || '' }} \
@@ -127,7 +130,7 @@ jobs:
           python3 survey_main.py \
             --report-date "${{ needs.resolve.outputs.report_date }}" \
             --config survey_measure.json \
-            --recipients "${{ steps.cfg.outputs.recipients }}" \
+            --recipients "${{ steps.cfg.outputs.recipients_measure }}" \
             --tz "${{ steps.cfg.outputs.tz }}" \
             --sender "${{ steps.cfg.outputs.sender_measure }}" \
             ${{ inputs.dry_run && '--dry-run' || '' }} \
@@ -163,11 +166,14 @@ jobs:
           import json, os
           cfg = json.load(open('email_config.json'))
           s = cfg['schedules']['pst']
+          dm = cfg['digests']['survey_marine']
+          ds = cfg['digests']['survey_measure']
           with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-              f.write('recipients=' + ','.join(s['recipients']) + '\n')
               f.write('tz=' + s['tz'] + '\n')
-              f.write('sender_marine=' + cfg['digests']['survey_marine']['sender'] + '\n')
-              f.write('sender_measure=' + cfg['digests']['survey_measure']['sender'] + '\n')
+              f.write('recipients_marine=' + ','.join(dm['recipients']['pst']) + '\n')
+              f.write('sender_marine=' + dm['sender'] + '\n')
+              f.write('recipients_measure=' + ','.join(ds['recipients']['pst']) + '\n')
+              f.write('sender_measure=' + ds['sender'] + '\n')
           "
 
       - name: Send Marine Radar survey digest (PST)
@@ -180,7 +186,7 @@ jobs:
           python3 survey_main.py \
             --report-date "${{ needs.resolve.outputs.report_date }}" \
             --config survey_marine.json \
-            --recipients "${{ steps.cfg.outputs.recipients }}" \
+            --recipients "${{ steps.cfg.outputs.recipients_marine }}" \
             --tz "${{ steps.cfg.outputs.tz }}" \
             --sender "${{ steps.cfg.outputs.sender_marine }}" \
             ${{ inputs.dry_run && '--dry-run' || '' }} \
@@ -196,7 +202,7 @@ jobs:
           python3 survey_main.py \
             --report-date "${{ needs.resolve.outputs.report_date }}" \
             --config survey_measure.json \
-            --recipients "${{ steps.cfg.outputs.recipients }}" \
+            --recipients "${{ steps.cfg.outputs.recipients_measure }}" \
             --tz "${{ steps.cfg.outputs.tz }}" \
             --sender "${{ steps.cfg.outputs.sender_measure }}" \
             ${{ inputs.dry_run && '--dry-run' || '' }} \
