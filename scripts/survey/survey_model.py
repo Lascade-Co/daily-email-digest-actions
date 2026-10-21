@@ -125,6 +125,10 @@ log = logging.getLogger(__name__)
 _OTHER_RE = re.compile(r"^other\b", re.IGNORECASE)
 _LOW_VALUE = {"", "—", "-", "n/a", "na", "none", "no", "nothing", "nil", ".", "ok", "good"}
 _MAX_SUMMARY_GROUPS = 8
+_PALETTE = [
+    "#4a90d9", "#e67e22", "#2ecc71", "#e74c3c", "#9b59b6",
+    "#1abc9c", "#f1c40f", "#e84393", "#00b894", "#6c5ce7",
+]
 
 _GROUP_PROMPT = """\
 You are a survey response analyst. Given a list of user responses (already translated to English), \
@@ -284,13 +288,14 @@ def build_model(config, fetched_tabs, cutoff_dt, now_dt, translate_fn=None, disp
                         counter[part] += 1
                 total_picks = sum(counter.values())
                 options = []
-                for val, cnt in counter.most_common():
+                for oi, (val, cnt) in enumerate(counter.most_common()):
                     pct = cnt / total_picks * 100 if total_picks else 0
+                    color = color_map.get(val, _PALETTE[oi % len(_PALETTE)])
                     options.append({
                         "value": val,
                         "count": cnt,
                         "pct": round(pct, 1),
-                        "color": color_map.get(val, "#555"),
+                        "color": color,
                     })
                 distributions.append({
                     "header": col_def["header"],
@@ -320,13 +325,14 @@ def build_model(config, fetched_tabs, cutoff_dt, now_dt, translate_fn=None, disp
                             counter[part] += 1
                     total_picks = sum(counter.values())
                     options = []
-                    for val, cnt in counter.most_common():
+                    for oi, (val, cnt) in enumerate(counter.most_common()):
                         pct = cnt / total_picks * 100 if total_picks else 0
+                        color = color_map.get(val, _PALETTE[oi % len(_PALETTE)])
                         options.append({
                             "value": val,
                             "count": cnt,
                             "pct": round(pct, 1),
-                            "color": color_map.get(val, "#555"),
+                            "color": color,
                         })
                     summaries.append({
                         "header": col_def["header"],
