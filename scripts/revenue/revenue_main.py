@@ -92,7 +92,7 @@ def main():
         sys.exit("Either --to or --recipients must be provided")
 
     msg = MIMEMultipart("alternative")
-    msg["From"] = f"Lascade Revenue <{gmail_user}>"
+    msg["From"] = f"MarineRadar Revenue <{gmail_user}>"
     msg["To"] = ", ".join(recipients)
     msg["Subject"] = f"{prefix}{subject}"
     msg.attach(MIMEText(html, "html"))
