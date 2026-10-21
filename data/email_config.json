@@ -19,7 +19,7 @@
       "subject": "Stripe Web Revenue — MarineRadar",
       "sender": "MarineRadar",
       "recipients": {
-        "ist": ["angelrose@lascade.com"],
+        "ist": ["angelrose@lascade.com","varsha@lascade.com"],
         "pst": ["cherian@lascade.com"]
       }
     },
@@ -27,7 +27,7 @@
       "subject": "App Reviews — 3★ or under",
       "sender": "App Reviews",
       "recipients": {
-        "ist": ["angelrose@lascade.com"],
+        "ist": ["angelrose@lascade.com","adarsh@lascade.com"],
         "pst": ["cherian@lascade.com"]
       }
     },
@@ -35,7 +35,7 @@
       "subject": "Marine Radar Survey Responses",
       "sender": "MarineRadar",
       "recipients": {
-        "ist": ["angelrose@lascade.com"],
+        "ist": ["angelrose@lascade.com","adarsh@lascade.com"],
         "pst": ["cherian@lascade.com"]
       }
     },
