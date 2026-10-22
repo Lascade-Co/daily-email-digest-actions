@@ -285,6 +285,12 @@ class WorkflowTests(unittest.TestCase):
             self.assertTrue(all(line.startswith("::add-mask::") for line in out), out)
             self.assertTrue({"::add-mask::a@example.com", "::add-mask::b@example.com",
                              "::add-mask::c%25d@example.com"} <= set(out), out)
+            with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as event:
+                json.dump({"inputs": {"to": "Test User <test@example.com>"}}, event)
+            out = subprocess.run(["bash", "-c", first["run"]], capture_output=True, text=True,
+                                 env={**os.environ, "GITHUB_EVENT_PATH": event.name}).stdout.splitlines()
+            os.unlink(event.name)
+            self.assertEqual(out, ["::add-mask::Test User <test@example.com>"])   # never the bare word "Test"
 
     def test_gates_target_0505_and_dedupe_on_the_production_prefix(self):
         for job in ("gate", "gate2"):

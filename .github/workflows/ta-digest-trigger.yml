@@ -53,7 +53,8 @@ jobs:
           import json, os, re
           to = (json.load(open(os.environ["GITHUB_EVENT_PATH"])).get("inputs") or {}).get("to") or ""
           # Mask every address on its own line; workflow commands cannot carry a raw CR or LF.
-          for part in {to.strip(), *re.split(r"[\s,;]+", to)}:
+          # Split on separators only: masking a display-name word such as "Test" would also blank the matrix output.
+          for part in {to.strip(), *(p.strip() for p in re.split(r"[,;\r\n]+", to))}:
               if part and "\n" not in part and "\r" not in part:
                   print("::add-mask::" + part.replace("%", "%25"))
           PY
@@ -132,7 +133,8 @@ jobs:
           import json, os, re
           to = (json.load(open(os.environ["GITHUB_EVENT_PATH"])).get("inputs") or {}).get("to") or ""
           # Mask every address on its own line; workflow commands cannot carry a raw CR or LF.
-          for part in {to.strip(), *re.split(r"[\s,;]+", to)}:
+          # Split on separators only: masking a display-name word such as "Test" would also blank the matrix output.
+          for part in {to.strip(), *(p.strip() for p in re.split(r"[,;\r\n]+", to))}:
               if part and "\n" not in part and "\r" not in part:
                   print("::add-mask::" + part.replace("%", "%25"))
           PY
