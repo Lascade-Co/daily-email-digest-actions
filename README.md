@@ -21,6 +21,25 @@ The four callers use `./.github/workflows/_digest.yml` from the same commit. Eac
 
 The `Delivered <PT|IST> for <D>` aggregate marker appears only after every digest in the edition succeeds. A partial survey run preserves its successful per-digest marker so a later cron sends only the missing product. Test sends and dry runs never create delivery markers. Gmail SMTP has no provider idempotency key: an ambiguous transport failure can still require investigation before recovery.
 
+## TravelAnimator digest trigger
+
+`ta-digest-trigger.yml` sends no email itself. The private `Lascade-Co/TA-daily-issues-digest` repository's crons start
+hours late, and sleeping there would use the organisation's shared private Actions minutes, so this public workflow
+does the waiting. PT runs at `53 3,6,9 * * *` and IST at `19 13,16,19 * * *` UTC. Two gates sleep until 05:05 local.
+`scripts/ta_trigger/trigger.py` then dispatches TA's issues and crash workflows with `phase=build` and
+`end=<D> 05:00`, holds until 05:55, and dispatches `phase=send build_run=<build run>` for every kind that built. Each kind
+is independent and gets one retry. Builds must finish by 05:50 and sends by 06:10 local. A child still running at its
+deadline is cancelled. Only a fully delivered edition gets the dated `Delivered TA <PT|IST> for <D>` step the gates
+dedupe on.
+
+Manual inputs: `mode=dry` (TA dry runs, the default), `mode=test` with `to` (real build→send chain to that address
+only, no markers) and `mode=recovery` (production now, `main` only; TA's markers make an already-delivered day a no-op).
+Manual runs skip the sleeps and the hold.
+
+It needs the fine-grained token `TA_DIGEST_DISPATCH_TOKEN` (resource owner Lascade-Co, only TA-daily-issues-digest,
+Actions: read and write) as a secret of the `ta-dispatch` environment, whose deployment branches are limited to `main`.
+When it expires, the deliver step fails and TA's own late fallback crons still deliver.
+
 ## Manual runs and encrypted previews
 
 Each caller accepts:

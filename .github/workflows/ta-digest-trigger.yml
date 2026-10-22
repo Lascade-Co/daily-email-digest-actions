@@ -1,0 +1,153 @@
+name: TA digest trigger
+
+# Lascade-Co/TA-daily-issues-digest is private and GitHub starts its crons hours
+# late, so this public workflow sleeps for free and dispatches its phase=build
+# runs at 05:05 and phase=send runs at 05:55 local (scripts/ta_trigger/trigger.py).
+on:
+  workflow_dispatch:
+    inputs:
+      edition:
+        description: Edition
+        type: choice
+        options: [both, pt, ist]
+        default: both
+      mode:
+        description: "dry = TA dry runs; test = real build and send to `to`; recovery = production send now"
+        type: choice
+        options: [dry, test, recovery]
+        default: dry
+      to:
+        description: Test recipient (mode=test only)
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: ta-digest-trigger-${{ github.event_name == 'schedule' && (startsWith(github.event.schedule, '19 ') && 'ist' || 'pt') || inputs.edition || 'both' }}-${{ github.event_name }}
+  cancel-in-progress: false
+
+env:
+  EVENT: ${{ github.event_name }}
+  SCHEDULE: ${{ github.event.schedule }}
+  INPUT_EDITION: ${{ inputs.edition || 'both' }}
+  MODE: ${{ inputs.mode || 'dry' }}
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    outputs:
+      proceed: ${{ steps.timing.outputs.proceed }}
+      matrix: ${{ steps.settings.outputs.matrix }}
+      zone: ${{ steps.settings.outputs.zone }}
+      report_date: ${{ steps.settings.outputs.report_date }}
+      sent_step: ${{ steps.settings.outputs.sent_step }}
+    steps:
+      - name: Mask test recipient
+        env:
+          TEST_TO: ${{ inputs.to }}
+        run: if [ -n "$TEST_TO" ]; then echo "::add-mask::$TEST_TO"; fi
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          sparse-checkout: scripts
+      - name: Resolve editions
+        id: settings
+        env:
+          TEST_TO: ${{ inputs.to }}
+        run: python3 -m scripts.ta_trigger.trigger settings
+      - name: First timing gate
+        id: timing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ZONE: ${{ steps.settings.outputs.zone }}
+          SENT_STEP: ${{ steps.settings.outputs.sent_step }}
+          REPORT_DATE: ${{ steps.settings.outputs.report_date }}
+        run: |
+          if [ "$EVENT" = workflow_dispatch ]; then
+            echo 'proceed=true' >> "$GITHUB_OUTPUT"
+          else
+            python3 scripts/common/catchup_gate.py --phase 1 --event "$EVENT" --workflow ta-digest-trigger.yml \
+              --sent-step "$SENT_STEP" --tz "$ZONE" --target 05:05 --report-date "$REPORT_DATE"
+          fi
+
+  gate2:
+    needs: gate
+    if: needs.gate.outputs.proceed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    outputs:
+      proceed: ${{ steps.timing.outputs.proceed }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          sparse-checkout: scripts
+      - name: Second timing gate
+        id: timing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ZONE: ${{ needs.gate.outputs.zone }}
+          SENT_STEP: ${{ needs.gate.outputs.sent_step }}
+          REPORT_DATE: ${{ needs.gate.outputs.report_date }}
+        run: |
+          if [ "$EVENT" = workflow_dispatch ]; then
+            echo 'proceed=true' >> "$GITHUB_OUTPUT"
+          else
+            python3 scripts/common/catchup_gate.py --phase 2 --event "$EVENT" --workflow ta-digest-trigger.yml \
+              --sent-step "$SENT_STEP" --tz "$ZONE" --target 05:05 --report-date "$REPORT_DATE"
+          fi
+
+  deliver:
+    needs: [gate, gate2]
+    if: needs.gate2.outputs.proceed == 'true'
+    name: deliver (${{ matrix.edition }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    # The token is an environment secret limited to main.
+    environment: ta-dispatch
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.gate.outputs.matrix) }}
+    # Shared by schedules and manual runs, so a recovery never overlaps a scheduled chain.
+    concurrency:
+      group: ta-digest-deliver-${{ matrix.edition }}
+      cancel-in-progress: false
+    steps:
+      - name: Mask test recipient
+        env:
+          TEST_TO: ${{ inputs.to }}
+        run: if [ -n "$TEST_TO" ]; then echo "::add-mask::$TEST_TO"; fi
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          sparse-checkout: scripts
+      # Keep this the only step that uses the token. Only a production success
+      # carries the dated "Delivered TA <ED> for <D>" name the gates dedupe on.
+      - name: ${{ matrix.step }}
+        env:
+          GH_TOKEN: ${{ secrets.TA_DIGEST_DISPATCH_TOKEN }}
+          EDITION: ${{ matrix.edition }}
+          REPORT_DATE: ${{ matrix.report_date }}
+          ZONE: ${{ matrix.zone }}
+          MODE: ${{ github.event_name == 'schedule' && 'scheduled' || inputs.mode }}
+          TEST_TO: ${{ inputs.to }}
+        run: |
+          test -n "$GH_TOKEN" || { echo "TA_DIGEST_DISPATCH_TOKEN is not set in the ta-dispatch environment" >&2; exit 1; }
+          python3 -m scripts.ta_trigger.trigger deliver
+
+  # GitHub disables scheduled workflows in public repos after 60 days without
+  # commits. Re-enabling it on every run resets that timer.
+  keepalive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/ta-digest-trigger.yml/enable"
+        env:
+          GH_TOKEN: ${{ github.token }}
