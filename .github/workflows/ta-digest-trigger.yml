@@ -4,6 +4,10 @@ name: TA digest trigger
 # late, so this public workflow sleeps for free and dispatches its phase=build
 # runs at 05:05 and phase=send runs at 05:55 local (scripts/ta_trigger/trigger.py).
 on:
+  schedule:
+    # Start the evening before; two sleeping gates release at 05:05 local.
+    - cron: '53 3,6,9 * * *'     # PT
+    - cron: '19 13,16,19 * * *'  # IST
   workflow_dispatch:
     inputs:
       edition:
