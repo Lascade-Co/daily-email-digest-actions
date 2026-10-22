@@ -128,7 +128,7 @@ class Chain:
     def deadline(self, phase, started):
         if self.mode == "scheduled":
             return self.local("05:50" if phase == "build" else "06:10")
-        return started + (MANUAL_BUILD if phase == "build" else MANUAL_SEND)
+        return started + (MANUAL_SEND if phase == "send" else MANUAL_BUILD)
 
     def inputs(self, phase, build_run=None):
         base = {"edition": self.edition, "end": self.end}
@@ -149,60 +149,71 @@ class Chain:
             print(f"{kind}: {phase} dispatch failed")
             return None
 
-    def wait(self, kind, run_id, deadline):
-        """Conclusion of a child, or 'timeout' after cancelling it at the deadline."""
+    def status(self, run_id):
+        try:
+            run = self.ta.run(run_id)
+        except Exception:
+            return None   # transient API error; poll again
+        return (run.get("conclusion") or "unknown") if run.get("status") == "completed" else None
+
+    def run_all(self, phase, build_runs=None):
+        """Run one phase for every kind at once; each kind gets one re-dispatch and its own deadline.
+
+        Returns {kind: (run_id or None, outcome)}. A kind past its deadline is cancelled
+        without waiting for, or holding up, the other kind.
+        """
+        kinds = list(build_runs) if build_runs is not None else list(KINDS)
+        extra = (lambda kind: build_runs[kind]) if build_runs is not None else (lambda kind: None)
+        state = {}
+        for kind in kinds:
+            started = self.clock()
+            state[kind] = {"run": self.start(kind, phase, extra(kind)), "attempt": 1,
+                           "deadline": self.deadline(phase, started)}
+        done = {}
         while True:
-            try:
-                run = self.ta.run(run_id)
-                if run.get("status") == "completed":
-                    return run.get("conclusion") or "unknown"
-            except Exception:
-                pass   # transient API error; keep polling until the deadline
-            if self.clock() >= deadline:
-                try:
-                    self.ta.cancel(run_id)
-                except Exception:
-                    pass
-                return "timeout"
+            for kind in [k for k in kinds if k not in done]:
+                s = state[kind]
+                outcome = self.status(s["run"]) if s["run"] is not None else "dispatch failed"
+                if outcome == "success":
+                    done[kind] = (s["run"], "success")
+                    continue
+                if outcome is None and self.clock() < s["deadline"]:
+                    continue
+                if outcome is None:
+                    try:
+                        self.ta.cancel(s["run"])
+                    except Exception:
+                        pass
+                    print(f"{kind}: {phase} timeout")
+                    done[kind] = (None, "timeout")
+                    continue
+                print(f"{kind}: {phase} attempt {s['attempt']} {outcome}")
+                if s["attempt"] == 1 and self.clock() < s["deadline"]:
+                    s["run"], s["attempt"] = self.start(kind, phase, extra(kind)), 2
+                else:
+                    done[kind] = (None, outcome)
+            if len(done) == len(kinds):
+                return done
             self.sleep(POLL_SECONDS)
 
-    def phase(self, kind, phase, run_id, started, build_run=None):
-        """Wait for a dispatched child; re-dispatch once if it failed and time remains."""
-        deadline = self.deadline(phase, started)
-        for attempt in (1, 2):
-            outcome = self.wait(kind, run_id, deadline) if run_id is not None else "dispatch failed"
-            if outcome == "success":
-                return run_id, outcome
-            print(f"{kind}: {phase} attempt {attempt} {outcome}")
-            if attempt == 2 or outcome == "timeout" or self.clock() >= deadline:
-                return None, outcome
-            run_id = self.start(kind, phase, build_run)
-        return None, outcome
-
     def deliver(self):
-        result = {}
         if self.mode == "dry":
-            started = {kind: (self.start(kind, "dry"), self.clock()) for kind in KINDS}
-            for kind, (run_id, at) in started.items():
-                ok, outcome = self.phase(kind, "dry", run_id, at)
-                result[kind] = "dry run ok" if ok else f"dry run {outcome}"
-            return result
-        builds = {kind: (self.start(kind, "build"), self.clock()) for kind in KINDS}
+            return {kind: "dry run ok" if run else f"dry run {outcome}"
+                    for kind, (run, outcome) in self.run_all("dry").items()}
+        result = {}
         built = {}
-        for kind, (run_id, at) in builds.items():
-            ok, outcome = self.phase(kind, "build", run_id, at)
-            # A day TA already delivered builds nothing; its send run then finds the marker and skips.
-            if ok:
-                built[kind] = ok
+        # A day TA already delivered builds nothing; its send run then finds the marker and skips.
+        for kind, (run, outcome) in self.run_all("build").items():
+            if run:
+                built[kind] = run
             else:
                 result[kind] = f"build {outcome}"
-        if built and self.mode == "scheduled":
-            self.hold()
-        for kind, build_run in built.items():
-            run_id, at = self.start(kind, "send", build_run), self.clock()
-            ok, outcome = self.phase(kind, "send", run_id, at, build_run)
-            result[kind] = "delivered" if ok else f"send {outcome}"
-        return result
+        if built:
+            if self.mode == "scheduled":
+                self.hold()
+            for kind, (run, outcome) in self.run_all("send", built).items():
+                result[kind] = "delivered" if run else f"send {outcome}"
+        return {kind: result[kind] for kind in KINDS}
 
 
 def main(argv=None):
@@ -214,6 +225,9 @@ def main(argv=None):
         if args.command == "settings":
             G.emit(**settings(env, now_utc()))
             return 0
+        # A job-only re-run skips settings, so repeat its production re-run guard here.
+        if env["MODE"] in ("scheduled", "recovery") and env.get("GITHUB_RUN_ATTEMPT", "1") != "1":
+            raise TriggerError("production re-runs are not allowed; dispatch mode=recovery instead")
         chain = Chain(TA(), env["EDITION"], env["REPORT_DATE"], env["ZONE"], env["MODE"], env.get("TEST_TO", ""))
         result = chain.deliver()
     except TriggerError as exc:

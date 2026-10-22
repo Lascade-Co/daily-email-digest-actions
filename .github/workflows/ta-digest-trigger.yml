@@ -46,10 +46,11 @@ jobs:
       report_date: ${{ steps.settings.outputs.report_date }}
       sent_step: ${{ steps.settings.outputs.sent_step }}
     steps:
+      # Reads the event file, so the address is masked before any step prints it in its env block.
       - name: Mask test recipient
-        env:
-          TEST_TO: ${{ inputs.to }}
-        run: if [ -n "$TEST_TO" ]; then echo "::add-mask::$TEST_TO"; fi
+        run: |
+          python3 -c 'import json, os; to = (json.load(open(os.environ["GITHUB_EVENT_PATH"])).get("inputs") or {}).get("to") or ""; to.strip() and print("::add-mask::" + to.strip())'
+          python3 -c 'import json, os; to = (json.load(open(os.environ["GITHUB_EVENT_PATH"])).get("inputs") or {}).get("to") or ""; to and print("::add-mask::" + to)'
       - uses: actions/checkout@v6
         with:
           ref: ${{ github.sha }}
@@ -118,10 +119,11 @@ jobs:
       group: ta-digest-deliver-${{ matrix.edition }}
       cancel-in-progress: false
     steps:
+      # Reads the event file, so the address is masked before any step prints it in its env block.
       - name: Mask test recipient
-        env:
-          TEST_TO: ${{ inputs.to }}
-        run: if [ -n "$TEST_TO" ]; then echo "::add-mask::$TEST_TO"; fi
+        run: |
+          python3 -c 'import json, os; to = (json.load(open(os.environ["GITHUB_EVENT_PATH"])).get("inputs") or {}).get("to") or ""; to.strip() and print("::add-mask::" + to.strip())'
+          python3 -c 'import json, os; to = (json.load(open(os.environ["GITHUB_EVENT_PATH"])).get("inputs") or {}).get("to") or ""; to and print("::add-mask::" + to)'
       - uses: actions/checkout@v6
         with:
           ref: ${{ github.sha }}

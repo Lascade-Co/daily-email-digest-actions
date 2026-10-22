@@ -62,8 +62,12 @@ class FakeTA:
 
 def chain(ta, clock, mode="scheduled", edition="pt", day="2026-10-23", to=""):
     holds = []
-    c = T.Chain(ta, edition, day, T.ZONES[edition], mode, to, clock=clock, sleep=clock.sleep,
-                hold=lambda: holds.append(clock()))
+
+    def hold():   # like hold.hold_until: advance to 05:55 local
+        holds.append(clock())
+        clock.now = max(clock.now, c.local("05:55").astimezone(timezone.utc))
+
+    c = T.Chain(ta, edition, day, T.ZONES[edition], mode, to, clock=clock, sleep=clock.sleep, hold=hold)
     return c, holds
 
 
@@ -209,6 +213,41 @@ class ChainTests(unittest.TestCase):
                          [{"edition": "pt", "end": "2026-10-22 05:00", "dry": "true"}] * 2)
         self.assertEqual(holds, [])
 
+    def test_slow_send_does_not_block_the_other_send(self):
+        clock = self.scheduled_clock()
+        ta = FakeTA(clock, durations={("issues", "send"): [60, 1]})
+        c, _ = chain(ta, clock)
+        result, _ = quiet(c.deliver)
+        self.assertEqual(result, {"issues": "send timeout", "crash": "delivered"})
+        crash_send = next(r for r, (k, p, _) in zip(sorted(ta.runs), ta.dispatched) if (k, p) == ("crash", "send"))
+        self.assertNotIn(crash_send, ta.cancelled)
+
+    def test_early_crash_failure_is_retried_while_issues_is_still_building(self):
+        clock = self.scheduled_clock()
+        ta = FakeTA(clock, outcomes={("crash", "build"): ["failure", "success"]},
+                    durations={("issues", "build"): [40, 1], ("crash", "build"): [1, 1]})
+        c, _ = chain(ta, clock)
+        result, _ = quiet(c.deliver)
+        self.assertEqual(result, {"issues": "delivered", "crash": "delivered"})
+        order = [(k, p) for k, p, _ in ta.dispatched]
+        self.assertLess(order.index(("crash", "build"), 2), 3)   # crash retried before any send
+
+    def test_dry_builds_get_the_build_budget(self):
+        clock = Clock(utc("2026-10-22T11:00:00-07:00"))
+        ta = FakeTA(clock, durations={("issues", "dry"): [20, 1]})
+        c, _ = chain(ta, clock, mode="dry", day="2026-10-22")
+        result, _ = quiet(c.deliver)
+        self.assertEqual(result["issues"], "dry run ok")
+
+    def test_job_only_rerun_of_production_deliver_is_refused(self):
+        import os
+        from unittest.mock import patch
+        env = {"EDITION": "pt", "REPORT_DATE": "2026-10-22", "ZONE": T.ZONES["pt"], "MODE": "recovery",
+               "GITHUB_RUN_ATTEMPT": "2"}
+        with patch.dict(os.environ, env), patch.object(T, "TA", side_effect=AssertionError("dispatched")), \
+                contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(T.main(["deliver"]), 2)
+
     def test_ist_scheduled_deadlines_use_ist(self):
         clock = Clock(utc("2026-10-23T05:05:00+05:30"))
         c, _ = chain(FakeTA(clock), clock, edition="ist")
@@ -229,6 +268,13 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(jobs["deliver"]["environment"], "ta-dispatch")
         self.assertNotIn("pull_request", self.wf["on"])
         self.assertNotIn("pull_request_target", self.wf["on"])
+
+    def test_mask_steps_read_the_event_file_not_env(self):
+        for job in ("gate", "deliver"):
+            first = self.wf["jobs"][job]["steps"][0]
+            self.assertEqual(first["name"], "Mask test recipient")
+            self.assertNotIn("env", first)
+            self.assertIn("GITHUB_EVENT_PATH", first["run"])
 
     def test_gates_target_0505_and_dedupe_on_the_production_prefix(self):
         for job in ("gate", "gate2"):
