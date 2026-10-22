@@ -1,10 +1,7 @@
 """Render contracts taken from the approved email component reference."""
-from datetime import date, timedelta
 from html.parser import HTMLParser
-import json
 import re
 import unittest
-from urllib.parse import parse_qs, urlsplit
 
 from render_fixtures import fixture_models, render_fixture
 
@@ -51,14 +48,6 @@ class Document(HTMLParser):
 def render_tree(digest, model=None):
     _, html = render_fixture(digest, model or fixture_models()[digest])
     return Document(html).root
-
-
-def chart_config(image):
-    config = parse_qs(urlsplit(image.attrs["src"]).query)["c"][0]
-    # QuickChart accepts JavaScript callbacks; quote just those for JSON inspection.
-    config = re.sub(r"function\(v\)\{return v\.toFixed\(\d+\)\+'%'\}",
-                    lambda match: json.dumps(match.group()), config)
-    return json.loads(config)
 
 
 class StrictRenderTests(unittest.TestCase):
@@ -125,71 +114,6 @@ class StrictRenderTests(unittest.TestCase):
             body = card.find("p", "text-main")[0]
             self.assertIn("Margin:0 0 12px 0;", body.attrs["style"])
             self.assertIn("font-size:15px; line-height:1.6; color:#222222;", body.attrs["style"])
-
-    def test_charts_use_template_figure_and_requested_palette(self):
-        for image in render_tree("conversion").find("img"):
-            self.assertEqual(image.attrs.get("class"), "fluid")
-            self.assertEqual(image.attrs["style"], "display:block; width:100%; max-width:520px; height:auto; border-radius:4px;")
-            self.assertEqual(image.parent.attrs["style"], "padding:0;")
-            figure = image.parent.parent.parent
-            caption = figure.children[1].children[0]
-            self.assertIn("Daily install→paid rate, last 2 cohorts", caption.text)
-            self.assertIn("font-size:13px; line-height:1.4; color:#666666; text-align:center;", caption.attrs["style"])
-            config = chart_config(image)
-            dataset = config["data"]["datasets"][0]
-            self.assertEqual(dataset["borderColor"], "#222222")
-            self.assertEqual(dataset["pointBackgroundColor"][-1], "#c0392b")
-            self.assertEqual(parse_qs(urlsplit(image.attrs["src"]).query)["bkg"], ["#ffffff"])
-            for axis in ("xAxes", "yAxes"):
-                spec = config["options"]["scales"][axis][0]
-                self.assertEqual(spec["ticks"]["fontColor"], "#777777")
-                self.assertIn("Inter", spec["ticks"]["fontFamily"])
-                self.assertIn("Segoe", spec["ticks"]["fontFamily"])
-            self.assertEqual(config["options"]["scales"]["yAxes"][0]["gridLines"]["color"], "#dddddd")
-
-    def test_flat_and_narrow_chart_ranges_never_repeat_y_tick_labels(self):
-        for rates in ([3.0, 3.02], [3.21, 3.21], [0.0, 0.0], [1.0, 1.7], [2.0, 12.0]):
-            with self.subTest(rates=rates):
-                model = fixture_models()["conversion"]
-                model["apps"] = model["apps"][:1]
-                for cohort, rate in zip(model["apps"][0]["cohorts"], rates):
-                    cohort["rate"] = rate
-                config = chart_config(render_tree("conversion", model).find("img")[0])
-                ticks = config["options"]["scales"]["yAxes"][0]["ticks"]
-                precision = int(re.search(r"toFixed\((\d+)\)", ticks["callback"]).group(1))
-                self.assertIn("stepSize", ticks)
-                self.assertGreater(ticks["stepSize"], 0)
-                self.assertLess(ticks["min"], ticks["max"])
-                self.assertLessEqual(ticks["min"], min(rates))
-                self.assertGreaterEqual(ticks["max"], max(rates))
-                count = round((ticks["max"] - ticks["min"]) / ticks["stepSize"]) + 1
-                labels = [f"{ticks['min'] + index * ticks['stepSize']:.{precision}f}%" for index in range(count)]
-                self.assertEqual(len(labels), len(set(labels)))
-                self.assertGreaterEqual(count, 2)
-
-    def test_final_percentage_has_space_when_last_axis_tick_is_skipped(self):
-        for rate in (0.0, 1.2, 100.0):
-            with self.subTest(rate=rate):
-                model = fixture_models()["conversion"]
-                model["apps"] = model["apps"][:1]
-                app = model["apps"][0]
-                app["cohorts"] = [dict(
-                    app["cohorts"][0],
-                    date=(date(2026, 10, 20) - timedelta(days=index)).isoformat(),
-                    rate=rate if index == 0 else rate + 0.2,
-                ) for index in range(14)]
-                config = chart_config(render_tree("conversion", model).find("img")[0])
-                labels = config["options"]["plugins"]["datalabels"]
-                self.assertEqual(labels["formatter"], "function(v){return v.toFixed(2)+'%'}")
-                self.assertEqual(labels["display"], [False] * 13 + [True])
-                self.assertFalse(labels.get("clip", False))
-                # QuickChart does not reserve room for datalabels automatically.
-                # These margins keep the entire percentage inside the PNG even
-                # without a final x-axis tick or with the final point at the top.
-                padding = config["options"].get("layout", {}).get("padding", {})
-                self.assertGreaterEqual(padding.get("right", 0), 32)
-                self.assertGreaterEqual(padding.get("top", 0), 24)
-
 
 if __name__ == "__main__":
     unittest.main()

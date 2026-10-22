@@ -1,15 +1,11 @@
 #!/usr/bin/env python3
 """Pure install-to-paid renderer with the shared shell and cohort charts."""
-import json
-import math
 from html import escape
-from urllib.parse import quote
 
 from scripts.common import email_shell as shell
 from scripts.conversion.conversion_model import format_pct, format_num, format_cohort_date
 
 ADAPTY_DASHBOARD = "https://app.adapty.io"
-CHART_FONT = "Inter, 'Segoe UI', sans-serif"
 
 
 def _rate_color(rate):
@@ -20,114 +16,40 @@ def _rate_color(rate):
     return shell.RED
 
 
-def _axis_ticks(rates):
-    """Keep adjacent ticks at least one displayed decimal unit apart."""
-    low, high = min(rates), max(rates)
-    precision = 2 if high - low < 1 else 1
-    scale = 10 ** precision
-    step_units = max(1, math.ceil((high - low) * scale / 4))
-    # Integer decimal units avoid rounding a minimum upward or maximum down.
-    low_units = math.floor(round(low * scale, 8) / step_units) * step_units
-    high_units = math.ceil(round(high * scale, 8) / step_units) * step_units
-    if low_units == high_units:
-        high_units += step_units
-    return {
-        "min": low_units / scale, "max": high_units / scale,
-        "stepSize": step_units / scale, "precision": precision,
-        "callback": "__TICK_CB__", "fontColor": shell.STAT_LABEL,
-        "fontSize": 11, "fontFamily": CHART_FONT,
-    }
-
-
-def _line_chart(app):
-    """Line chart rendered as a PNG image via QuickChart.io.
-
-    QuickChart renders Chart.js configs server-side, returning a PNG that
-    works in every email client including Gmail and Outlook.
-    """
-    cohorts = app["cohorts"]
-    if len(cohorts) < 2:
+def bar_chart(title, rows):
+    """Render the template's Bar Chart, highlighting the final cohort in red."""
+    rows = list(rows)
+    if not rows:
         return ""
-
-    pts = list(reversed(cohorts))
-    n = len(pts)
-    labels = [format_cohort_date(p["date"]) for p in pts]
-    rates = [round(p["rate"], 2) for p in pts]
-    last_color = shell.RED
-    ticks = _axis_ticks(rates)
-
-    pt_bg = [shell.INK] * (n - 1) + [last_color]
-    pt_r = [2] * (n - 1) + [6]
-    pt_bc = [shell.INK] * (n - 1) + ["#ffffff"]
-    pt_bw = [0] * (n - 1) + [2]
-    dl_display = [False] * (n - 1) + [True]
-
-    config = {
-        "type": "line",
-        "data": {
-            "labels": labels,
-            "datasets": [{
-                "data": rates,
-                "borderColor": shell.INK,
-                "borderWidth": 1.5,
-                "pointBackgroundColor": pt_bg,
-                "pointRadius": pt_r,
-                "pointBorderColor": pt_bc,
-                "pointBorderWidth": pt_bw,
-                "fill": False,
-                "lineTension": 0.3,
-            }],
-        },
-        "options": {
-            "legend": {"display": False},
-            # The last x-axis tick may be skipped, so explicitly reserve space
-            # for the final percentage label above the point and inside the PNG.
-            "layout": {"padding": {"top": 24, "right": 32}},
-            "scales": {
-                "yAxes": [{
-                    "ticks": ticks,
-                    "gridLines": {"color": shell.RULE, "zeroLineColor": shell.RULE},
-                }],
-                "xAxes": [{
-                    "ticks": {"maxTicksLimit": 5, "fontColor": shell.STAT_LABEL,
-                              "fontSize": 11, "fontFamily": CHART_FONT},
-                    "gridLines": {"display": False, "color": shell.RULE, "zeroLineColor": shell.RULE},
-                }],
-            },
-            "plugins": {
-                "datalabels": {
-                    "display": dl_display,
-                    "align": "top",
-                    "color": last_color,
-                    "font": {"family": CHART_FONT, "weight": "bold", "size": 12},
-                    "formatter": "__FMT_CB__",
-                },
-            },
-        },
-    }
-
-    cfg = json.dumps(config, separators=(",", ":"))
-    formatter = "function(v){return v.toFixed(" + str(ticks["precision"]) + ")+'%'}"
-    cfg = cfg.replace('"__TICK_CB__"', formatter)
-    cfg = cfg.replace('"__FMT_CB__"', formatter)
-
-    url = ("https://quickchart.io/chart?c=" + quote(cfg)
-           + "&amp;w=520&amp;h=150&amp;bkg=%23ffffff")
-
-    alt = f"{app['name']} conversion: {format_pct(pts[-1]['rate'])}%"
-    # The reference's Images & Figures component uses a presentation table,
-    # a fluid image, and a centered 13px caption in the next row.
-    return (
-        '<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">'
-        '<tr><td style="padding:0;">'
-        f'<img src="{url}" alt="{escape(alt)}" width="520" height="150" '
-        'style="display:block; width:100%; max-width:520px; height:auto; border-radius:4px;" class="fluid" />'
-        '</td></tr><tr>'
-        f'<td style="padding:8px 0 0 0; font-family:{shell.FONT_BODY}; '
-        'font-size:13px; line-height:1.4; color:#666666; text-align:center;" class="text-muted">'
-        f'Daily install→paid rate, last {n} cohorts'
-        '</td></tr></table>'
+    html = (
+        '<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" '
+        'bgcolor="#fefefe" style="background-color:#fefefe; padding:0;" class="bar-chart-dm">'
+        '<tr><td style="padding:20px;">'
+        '<p style="margin:0; Margin:0 0 12px 0; '
+        f'font-family:{shell.FONT_HEADING}; font-size:11px; font-weight:600; '
+        'text-transform:uppercase; letter-spacing:0.06em; color:#999999;" class="bar-title-dm">'
+        + escape(str(title)) + '</p>'
     )
+    for index, (label, value_text, fraction) in enumerate(rows):
+        width = round(max(0.0, min(1.0, fraction)) * 100, 2)
+        color = shell.RED if index == len(rows) - 1 else shell.INK
+        spacing = ' style="margin-bottom:8px;"' if index < len(rows) - 1 else ''
+        html += (
+            '<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"'
+            + spacing + '><tr>'
+            f'<td width="130" style="font-family:{shell.FONT_HEADING}; font-size:12px; '
+            'font-weight:600; color:#444444; text-align:right; padding-right:10px; '
+            'vertical-align:middle;" class="bar-label-cell bar-label-dm">'
+            + escape(str(label)) + '</td><td style="vertical-align:middle;">'
+            '<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" '
+            'bgcolor="#f0eeec" style="background-color:#f0eeec;" class="bar-track-dm"><tr>'
+            f'<td width="{width:g}%" bgcolor="{color}" style="background-color:{color}; '
+            "height:28px; padding-left:8px; font-family:'Inter', system-ui, sans-serif; "
+            'font-size:11px; font-weight:700; color:#ffffff;">'
+            + escape(str(value_text)) + f'</td><td width="{100 - width:g}%"></td>'
+            '</tr></table></td></tr></table>'
+        )
+    return html + '</td></tr></table>'
 
 
 def _stats(app):
@@ -173,12 +95,17 @@ def render(model):
                 "No conversion data available for this reporting period."))
             continue
         body += _stats(app)
-        chart = _line_chart(app)
-        if chart:
-            body += shell.cell(chart)
+        cohorts = sorted(app["cohorts"], key=lambda cohort: cohort["date"])[-7:]
+        if cohorts:
+            maximum = max(cohort["rate"] for cohort in cohorts)
+            body += shell.cell(bar_chart("Install → paid by cohort day", [
+                (format_cohort_date(cohort["date"]), f"{cohort['rate']:.2f}%",
+                 cohort["rate"] / maximum if maximum > 0 else 0)
+                for cohort in cohorts
+            ]))
         else:
-            body += shell.cell(shell.callout("info", "Not enough cohorts",
-                "At least two install-date cohorts are needed to show a trend."))
+            body += shell.cell(shell.callout("info", "No cohort data",
+                "No install-date cohorts are available for this reporting period."))
     body += shell.cell(shell.h2("Conversion dashboard"), "32px 40px 0 40px")
     body += shell.cell(shell.button("View in Adapty", ADAPTY_DASHBOARD))
     body += shell.section_close() + shell.spacer()

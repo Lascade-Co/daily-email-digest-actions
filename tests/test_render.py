@@ -1,26 +1,7 @@
 """Renderer behavior: metric tails, safe text, and usable email structure."""
-from html.parser import HTMLParser
 import unittest
 
 from render_fixtures import fixture_models, render_fixture
-
-
-class ImagesInBodyCells(HTMLParser):
-    def __init__(self):
-        super().__init__()
-        self.cells = []
-        self.images = []
-
-    def handle_starttag(self, tag, attrs):
-        attrs = dict(attrs)
-        if tag == "td":
-            self.cells.append("body-cell" in attrs.get("class", "").split())
-        elif tag == "img":
-            self.images.append((attrs, any(self.cells)))
-
-    def handle_endtag(self, tag):
-        if tag == "td" and self.cells:
-            self.cells.pop()
 
 
 class RenderTests(unittest.TestCase):
@@ -73,15 +54,11 @@ class RenderTests(unittest.TestCase):
                     self.assertIn(text, html)
                 self.assertNotIn("<routes>", html)
 
-    def test_conversion_keeps_quickchart_images_inside_body_cells(self):
+    def test_conversion_uses_image_free_charts_and_keeps_app_totals(self):
         _, html = render_fixture("conversion", fixture_models()["conversion"])
-        parsed = ImagesInBodyCells()
-        parsed.feed(html)
-        self.assertEqual(len(parsed.images), 2)
-        for attrs, inside_body_cell in parsed.images:
-            self.assertTrue(inside_body_cell)
-            self.assertTrue(attrs["src"].startswith("https://quickchart.io/chart?c="))
-            self.assertIn("conversion:", attrs["alt"])
+        self.assertEqual(html.count('class="bar-chart-dm"'), 2)
+        self.assertNotIn("<img", html.lower())
+        self.assertNotIn("quickchart", html.lower())
         for text in ("32 paid", "1,000 installs", "GeoAnimator"):
             self.assertIn(text, html)
 
