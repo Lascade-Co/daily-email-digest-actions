@@ -29,7 +29,6 @@ def _translate_reviews(reviews, gemini_key):
     body = json.dumps({
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {
-            "temperature": 0.1,
             "maxOutputTokens": 8192,
             "responseMimeType": "application/json",
         },

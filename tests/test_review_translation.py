@@ -106,6 +106,7 @@ class ReviewTranslationTests(unittest.TestCase):
         self.assertEqual(request.full_url, "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=fixture-gemini-key")
         payload = json.loads(request.data)
         self.assertEqual(payload["generationConfig"]["responseMimeType"], "application/json")
+        self.assertNotIn("temperature", payload["generationConfig"])
         prompt = payload["contents"][0]["parts"][0]["text"]
         self.assertIn(SPANISH, prompt)
         self.assertIn(FRENCH, prompt)

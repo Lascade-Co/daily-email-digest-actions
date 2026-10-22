@@ -70,13 +70,18 @@ def _response_table(section):
 
     records = []
     for row in rows:
-        values = [str(value).strip() for value in row if value is not None]
-        values = [value for value in values if value and value != "—"]
-        record = '<strong>' + escape(values[0]) + '</strong>' if values else ''
-        if len(values) > 1:
+        fields = [(str(header), str(value).strip())
+                  for header, value in zip(headers, row) if value is not None]
+        fields = [(header, value) for header, value in fields if value and value != "—"]
+        record = '<strong>' + escape(fields[0][1]) + '</strong>' if fields else ''
+        if len(fields) > 1:
+            caption = ' · '.join(
+                header + (' ' if header == 'IMO' else ': ') + value
+                for header, value in fields[1:]
+            )
             record += (
                 '<br /><span style="font-size:13px; line-height:1.5; color:#666666;" '
-                'class="text-muted">' + escape(' · '.join(values[1:])) + '</span>'
+                'class="text-muted">' + escape(caption) + '</span>'
             )
         records.append(record)
 

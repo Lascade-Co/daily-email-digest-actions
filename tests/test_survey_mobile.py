@@ -33,9 +33,9 @@ class SurveyMobileTests(unittest.TestCase):
                 self.assertEqual(cells[0].find("strong")[0].text, "Britannic <ship> & fleet")
                 self.assertEqual(len(cells[0].find("br")), 1)
                 caption = cells[0].find("span", "text-muted")[0]
-                expected_caption = "1234567 · Passenger ship · United Kingdom"
+                expected_caption = "IMO 1234567 · Type: Passenger ship · Country: United Kingdom"
                 if count == 5:
-                    expected_caption += " · Add <route> details & ports"
+                    expected_caption += " · Details: Add <route> details & ports"
                 self.assertEqual(caption.text, expected_caption)
                 self.assertIn("font-size:13px;", caption.attrs["style"])
                 self.assertIn("color:#666666;", caption.attrs["style"])
@@ -55,15 +55,29 @@ class SurveyMobileTests(unittest.TestCase):
         cells = Document(html).root.find("table")[0].find("td")
         self.assertEqual(len(cells), 4)
         self.assertEqual(cells[0].find("strong")[0].text, "Frigate")
-        self.assertEqual(cells[0].find("span", "text-muted")[0].text, "Britain")
+        self.assertEqual(cells[0].find("span", "text-muted")[0].text, "Country: Britain")
         self.assertEqual(cells[1].find("strong")[0].text, "Calypso")
         self.assertFalse(cells[1].find("span"))
         self.assertFalse(cells[1].find("br"))
         self.assertEqual(cells[2].text, "")
         self.assertFalse(cells[2].children)
         self.assertEqual(cells[3].find("strong")[0].text, "Zero")
-        self.assertEqual(cells[3].find("span", "text-muted")[0].text, "0")
+        self.assertEqual(cells[3].find("span", "text-muted")[0].text, "IMO 0")
         self.assertNotIn("—", html)
+
+    def test_record_captions_escape_labels_and_keep_labels_with_nonempty_values(self):
+        html = survey_render._response_table(response_section(
+            ["Submission", 'IM<O> & "code"', "Type", "Country", "Details"],
+            [["Test vessel", "1 <2> & 3", "", "France", "—"]],
+        ))
+        cell = Document(html).root.find("table")[0].find("td")[0]
+        self.assertEqual(cell.find("strong")[0].text, "Test vessel")
+        caption = cell.find("span", "text-muted")[0]
+        self.assertEqual(caption.text, 'IM<O> & "code": 1 <2> & 3 · Country: France')
+        self.assertFalse(caption.children)
+        self.assertIn('IM&lt;O&gt; &amp; &quot;code&quot;: 1 &lt;2&gt; &amp; 3', html)
+        self.assertNotIn("Type:", html)
+        self.assertNotIn("Details:", html)
 
     def test_status_counts_toward_four_column_threshold_and_keeps_its_order(self):
         html = survey_render._response_table(response_section(
@@ -74,7 +88,8 @@ class SurveyMobileTests(unittest.TestCase):
         table = Document(html).root.find("table")[0]
         self.assertEqual([header.text for header in table.find("th")], ["Status"])
         self.assertEqual(table.find("strong")[0].text, "Pro")
-        self.assertEqual(table.find("span", "text-muted")[0].text, "More routes · 4/5 · Daily")
+        self.assertEqual(table.find("span", "text-muted")[0].text,
+                         "Feedback: More routes · Score: 4/5 · Frequency: Daily")
 
     def test_three_columns_keep_the_existing_table_layout(self):
         html = survey_render._response_table(response_section(

@@ -4,7 +4,9 @@ Run from the repository root: python3 tests/render_fixtures.py <output-directory
 Mobile acceptance fixtures: python3 tests/render_fixtures.py --mobile <output-directory>
 """
 from copy import deepcopy
+from datetime import datetime, timezone
 from importlib import import_module
+import json
 from pathlib import Path
 import sys
 
@@ -145,7 +147,7 @@ def render_fixture(digest, model):
 
 
 def mobile_fixture_models():
-    """Include translated Spanish feedback and a five-column ship submission."""
+    """Exercise translated feedback and the configured survey column layouts."""
     models = fixture_models()
     reviews = models["reviews"]
     reviews["app_names"][0] = "GeoAnimator"
@@ -157,34 +159,54 @@ def mobile_fixture_models():
         language="es",
         translated_body="The map needs more harbor labels and saved routes.",
     )
-    survey = models["survey_marine"]
-    survey["total"] += 2
-    survey["survey_count"] += 1
-    survey["sections"].append({
-        "label": "Missing Ships", "subtitle": "Submissions", "count": 2,
-        "render": "table", "has_status": False,
-        "columns": ["Vessel", "IMO", "Type", "Country", "Details"],
-        "rows": [
-            {"cells": [{"value": value} for value in [
-                "Britannic", "1234567", "Passenger vessel", "United Kingdom",
-                "Please add this vessel to the live map.",
-            ]]},
-            {"cells": [{"value": value} for value in [
-                "", "9876543", "Cargo vessel", "Spain", "—",
-            ]]},
-        ],
-    })
-    return {name: models[name] for name in ("reviews", "survey_marine", "conversion")}
+    from scripts.survey.survey_model import build_model
+
+    timestamp = "2026-10-21 10:30:00"
+    survey_rows = {
+        "survey_measure": {
+            "D2": [
+                [timestamp, "", "pro", "Yes, first try", ""],
+                [timestamp, "", "free", "Not yet", "Could not find a flat surface"],
+            ],
+            "D15": [[timestamp, "", "pro", "Furniture", "Photos", "PDF"]],
+            "D30": [[timestamp, "", "free", "Slow measurements", "Saved rooms", "Every day"]],
+        },
+        "survey_marine": {
+            "D30 Survey": [
+                [timestamp, "Slow map loading", "Saved routes", "Every day"],
+                [timestamp, "Missing harbor labels", "Port alerts", "A few times a week"],
+            ],
+            "Add your ship ": [
+                [timestamp, "Britannic", "9115339", "", "tanker", "Benin", "",
+                 "Please add this vessel to the live map."],
+                [timestamp, "", "9876543", "", "Cargo vessel", "Spain", "", "—"],
+            ],
+            "Map Survey": [
+                [timestamp, "More harbor alerts", "", "", "premium"],
+                [timestamp, "Keep recent searches", "", "", "free"],
+            ],
+        },
+    }
+    for digest, rows in survey_rows.items():
+        config = json.loads((ROOT / "data" / f"{digest}.json").read_text(encoding="utf-8"))
+        config["sheet_url"] = "https://docs.google.com/spreadsheets/d/fixture"
+        models[digest] = build_model(
+            config, rows,
+            datetime(2026, 10, 20, 12, tzinfo=timezone.utc),
+            datetime(2026, 10, 21, 12, tzinfo=timezone.utc),
+        )
+    return {name: models[name] for name in ("reviews", "survey_marine", "survey_measure", "conversion")}
 
 
 def write_mobile_previews(output_directory):
     output_directory = Path(output_directory)
     output_directory.mkdir(parents=True, exist_ok=True)
-    for digest, model in mobile_fixture_models().items():
+    models = mobile_fixture_models()
+    for digest, model in models.items():
         _, html = render_fixture(digest, model)
         name = "survey" if digest == "survey_marine" else digest
         (output_directory / f"b-{name}.html").write_text(html, encoding="utf-8")
-    print("Rendered 3 synthetic mobile fixture previews")
+    print(f"Rendered {len(models)} synthetic mobile fixture previews")
 
 
 def write_previews(output_directory):

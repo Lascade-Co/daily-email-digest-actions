@@ -1,5 +1,5 @@
 # COPY of product-intelligence/Style Template/email_shell.py — edit the canonical file, then re-copy.
-# sha256(canonical) = 1269e144dba5
+# sha256(canonical) = dd15638edbe2
 """Canonical, dependency-free digest email shell (Python 3.9+).
 
 Source: ``Style Template/styleguide-email.html``. The complete head and client
@@ -197,6 +197,10 @@ _HEAD = """<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http:
             .contributor-card-dm { background-color: #2a2927 !important; }
             .contributor-meta-dm { color: #a8a49e !important; }
             .callout-critical-dm { background-color: #2a2220 !important; }
+            .badge-critical-dm { color: #f0a094 !important; }
+            .badge-warning-dm { color: #e6c27a !important; }
+            .badge-positive-dm { color: #8fd3a5 !important; }
+            .badge-info-dm { color: #9cc9ec !important; }
             .callout-positive-dm { background-color: #202a22 !important; }
             .callout-info-dm { background-color: #20242a !important; }
         }
@@ -226,6 +230,10 @@ _HEAD = """<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http:
         [data-ogsc] .contributor-card-dm { background-color: #2a2927 !important; }
         [data-ogsc] .contributor-meta-dm { color: #a8a49e !important; }
         [data-ogsc] .callout-critical-dm { background-color: #2a2220 !important; }
+        [data-ogsc] .badge-critical-dm { color: #f0a094 !important; }
+        [data-ogsc] .badge-warning-dm { color: #e6c27a !important; }
+        [data-ogsc] .badge-positive-dm { color: #8fd3a5 !important; }
+        [data-ogsc] .badge-info-dm { color: #9cc9ec !important; }
         [data-ogsc] .callout-positive-dm { background-color: #202a22 !important; }
         [data-ogsc] .callout-info-dm { background-color: #20242a !important; }
         .tfix { width:100% !important; table-layout:fixed !important; }
@@ -415,7 +423,7 @@ def table(
             + ' style="padding:10px 12px; '
             f"font-family:{FONT_HEADING}; font-weight:600; font-size:13px; "
             'text-transform:uppercase; letter-spacing:0.03em; border-bottom:2px solid #222222; '
-            'white-space:nowrap; color:#222222;" class="heading-dm header-border">' + _text(heading) + '</th>'
+            'word-break:normal; overflow-wrap:normal; hyphens:none; color:#222222;" class="heading-dm header-border">' + _text(heading) + '</th>'
         )
     parts.append('</tr>\n')
     for row_index, row in enumerate(rows):
@@ -504,13 +512,13 @@ def badge(text: str, variant: str = "default") -> str:
                   'text-transform:uppercase; letter-spacing:0.03em;', 'badge-bg text-muted'),
         # Semantic colours come from the template's callout variants.
         "critical": ('padding:5px 10px; border-radius:12px; background-color:#fdf0ee; color:#c0392b; '
-                     'text-transform:uppercase; letter-spacing:0.03em;', 'callout-critical-dm'),
+                     'text-transform:uppercase; letter-spacing:0.03em;', 'callout-critical-dm badge-critical-dm'),
         "warning": ('padding:5px 10px; border-radius:12px; background-color:#faf3e6; color:#8a6520; '
-                    'text-transform:uppercase; letter-spacing:0.03em;', 'callout-warning-bg'),
+                    'text-transform:uppercase; letter-spacing:0.03em;', 'callout-warning-bg badge-warning-dm'),
         "positive": ('padding:5px 10px; border-radius:12px; background-color:#f0f8f2; color:#2a8c4a; '
-                     'text-transform:uppercase; letter-spacing:0.03em;', 'callout-positive-dm'),
+                     'text-transform:uppercase; letter-spacing:0.03em;', 'callout-positive-dm badge-positive-dm'),
         "info": ('padding:5px 10px; border-radius:12px; background-color:#eef5fb; color:#2980b9; '
-                 'text-transform:uppercase; letter-spacing:0.03em;', 'callout-info-bg'),
+                 'text-transform:uppercase; letter-spacing:0.03em;', 'callout-info-bg badge-info-dm'),
     }
     if variant not in variants:
         raise ValueError("badge variant must be default, outline, muted, critical, warning, positive, or info")
