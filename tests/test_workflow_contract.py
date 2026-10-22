@@ -48,6 +48,13 @@ class WorkflowContractTests(unittest.TestCase):
         for step in self.email["steps"]:
             self.assertNotIn("continue-on-error", step)
 
+    def test_aggregate_delivery_marker_uses_the_callers_frozen_report_day(self):
+        done = self.reusable["jobs"]["done"]
+        self.assertEqual(done["steps"][0]["name"],
+                         "Delivered ${{ inputs.edition == 'pt' && 'PT' || 'IST' }} for ${{ inputs.report_date }}")
+        self.assertNotIn("report_date", self.email.get("outputs", {}))
+        self.assertEqual(self.reusable["env"]["REPORT_DATE"], "${{ inputs.report_date }}")
+
     def test_callers_dispatch_same_branch_and_manual_both_fans_out(self):
         for name, pt, ist in [("revenue",45,11), ("reviews",47,13), ("survey",49,15), ("conversion",51,17)]:
             with self.subTest(name=name):
@@ -56,11 +63,40 @@ class WorkflowContractTests(unittest.TestCase):
                                  [f"{pt} 3,6,9 * * *", f"{ist} 13,16,19 * * *"])
                 job = caller["jobs"]["email"]
                 self.assertEqual(job["uses"], "./.github/workflows/_digest.yml")
-                self.assertEqual(job["strategy"]["matrix"]["edition"], "${{ fromJSON(needs.gate2.outputs.editions) }}")
+                self.assertEqual(job["strategy"]["matrix"],
+                                 {"include": "${{ fromJSON(needs.gate2.outputs.editions) }}"})
+                self.assertEqual(job["with"]["edition"], "${{ matrix.edition }}")
+                self.assertEqual(job["with"]["report_date"], "${{ matrix.report_date }}")
+                self.assertEqual(caller["jobs"]["gate"]["outputs"]["editions"],
+                                 "${{ steps.settings.outputs.editions }}")
+                self.assertEqual(caller["jobs"]["gate2"]["outputs"]["editions"],
+                                 "${{ needs.gate.outputs.editions }}")
                 self.assertEqual(job["secrets"], "inherit")
                 self.assertEqual(set(caller["jobs"]), {"gate", "gate2", "email"})
         checkout = next(s for s in self.email["steps"] if s.get("uses", "").startswith("actions/checkout@"))
         self.assertEqual(checkout["with"]["ref"], "${{ github.sha }}")
+
+    def test_settings_can_query_the_current_runs_creation_time(self):
+        self.assertEqual(self.reusable["env"].get("GH_TOKEN"), "${{ github.token }}")
+        for name in ["revenue", "reviews", "survey", "conversion"]:
+            with self.subTest(name=name):
+                caller = workflow(f"daily-{name}.yml")
+                settings = next(step for step in caller["jobs"]["gate"]["steps"]
+                                if step.get("id") == "settings")
+                self.assertEqual(settings.get("env", {}).get("GH_TOKEN"), "${{ github.token }}")
+
+    def test_timing_gates_use_the_report_day_frozen_before_sleep(self):
+        for name in ["revenue", "reviews", "survey", "conversion"]:
+            with self.subTest(name=name):
+                jobs = workflow(f"daily-{name}.yml")["jobs"]
+                self.assertEqual(jobs["gate"]["outputs"]["report_date"],
+                                 "${{ steps.settings.outputs.report_date }}")
+                first = next(step for step in jobs["gate"]["steps"] if step.get("id") == "timing")
+                self.assertEqual(first["env"].get("REPORT_DATE"), "${{ steps.settings.outputs.report_date }}")
+                self.assertIn('--report-date "$REPORT_DATE"', first["run"])
+                second = jobs["gate2"]["steps"][0]
+                self.assertEqual(second["env"]["REPORT_DATE"], "${{ needs.gate.outputs.report_date }}")
+                self.assertIn('--report-date "$REPORT_DATE"', second["run"])
 
     def test_public_artifact_is_only_encrypted_archive(self):
         uploads = [s for s in self.email["steps"] if s.get("uses", "").startswith("actions/upload-artifact@")]

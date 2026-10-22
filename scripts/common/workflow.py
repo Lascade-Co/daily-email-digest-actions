@@ -28,6 +28,10 @@ WORKFLOWS = {
 }
 
 
+class SettingsError(ValueError):
+    """A fixed, public-safe explanation for a rejected delivery."""
+
+
 def load_config():
     root = Path(__file__).resolve().parents[2]
     path = root / "data/email_config.json"
@@ -53,6 +57,33 @@ def workflow_for(digest):
     raise ValueError("unknown digest")
 
 
+def scheduled_run_created_at(env):
+    """Read this run's creation time, never the repository's creation time."""
+    try:
+        timestamp = env.get("RUN_CREATED_AT") or env.get("GITHUB_RUN_CREATED_AT")
+        run_id = env.get("GITHUB_RUN_ID", "")
+        if not timestamp and env.get("GITHUB_EVENT_PATH"):
+            with open(env["GITHUB_EVENT_PATH"], encoding="utf-8") as source:
+                metadata = json.load(source).get("workflow_run") or {}
+            if run_id and str(metadata.get("id")) == run_id:
+                timestamp = metadata.get("created_at")
+        if not timestamp:
+            repo = env.get("GITHUB_REPOSITORY", "")
+            if not repo or not run_id:
+                raise ValueError
+            metadata = G.gh_json(f"repos/{repo}/actions/runs/{run_id}")
+            if str(metadata.get("id")) != run_id:
+                raise ValueError
+            timestamp = metadata["created_at"]
+        created = dt.datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+        if created.utcoffset() is None:
+            raise ValueError
+        return created.astimezone(dt.timezone.utc)
+    except Exception:
+        # GitHub errors and event payloads must never reach public logs.
+        raise SettingsError("scheduled run creation time unavailable") from None
+
+
 def settings(env=None, now=None):
     env = os.environ if env is None else env
     now = G.now_utc() if now is None else now
@@ -72,6 +103,8 @@ def settings(env=None, now=None):
     zone = config["editions"][editions[0]]["tz"]
     mode = ("dry" if env.get("DRY_RUN") == "true" else
             "test" if env.get("TEST_TO") or env.get("TEST_MODE") == "true" else "real")
+    if mode == "real" and env.get("GITHUB_RUN_ATTEMPT") != "1":
+        raise SettingsError("production delivery requires a fresh run; re-runs are not allowed, dispatch recovery instead")
     if mode == "real" and event == "workflow_dispatch":
         if env.get("RECOVERY") != "true":
             raise ValueError("manual production sends require recovery=true")
@@ -79,24 +112,36 @@ def settings(env=None, now=None):
         # dedupe scans even though it used the same event-independent lock.
         if env.get("GITHUB_REF") != "refs/heads/main":
             raise ValueError("production recovery must run from main")
+    if event == "schedule" and now - scheduled_run_created_at(env) > dt.timedelta(hours=36):
+        raise SettingsError("scheduled run is older than 36 hours; dispatch recovery instead")
+    # Gate settings have no DIGEST and resolve every edition once. Reusable
+    # send jobs must consume that frozen date, even when they start after 05:00.
+    if digest and mode in ("real", "test") and not env.get("REPORT_DATE"):
+        raise SettingsError("REPORT_DATE is required for production and test delivery")
     supplied = env.get("REPORT_DATE") or (env.get("INPUT_DATE", "") if event != "schedule" else "")
+    supplied_date = None
     if supplied:
-        date = dt.date.fromisoformat(supplied)
-        if date.isoformat() != supplied:
+        supplied_date = dt.date.fromisoformat(supplied)
+        if supplied_date.isoformat() != supplied:
             raise ValueError("report date must be YYYY-MM-DD")
-    elif edition == "both":
-        date = None  # Each reusable-workflow edition resolves its own local day.
-    elif event == "schedule":
-        date = G.plan(now, tz=zone, target=(5, 5))[0]
-    else:
-        local = now.astimezone(ZoneInfo(zone))
-        date = local.date() - dt.timedelta(days=local.time() < dt.time(5))
+    matrix = []
+    for local_edition in editions:
+        local_zone = config["editions"][local_edition]["tz"]
+        if supplied_date:
+            report_date = supplied_date
+        elif event == "schedule":
+            report_date = G.plan(now, tz=local_zone, target=(5, 5))[0]
+        else:
+            local = now.astimezone(ZoneInfo(local_zone))
+            report_date = local.date() - dt.timedelta(days=local.time() < dt.time(5))
+        matrix.append({"edition": local_edition, "report_date": report_date.isoformat()})
+    date = matrix[0]["report_date"] if len(matrix) == 1 else supplied
     prefix = {"dry": "Dry run", "test": "Test send", "real": "Deliver"}[mode]
     return {
         "edition": edition,
-        "editions": json.dumps(editions, separators=(",", ":")),
+        "editions": json.dumps(matrix, separators=(",", ":")),
         "timezone": zone,
-        "report_date": date.isoformat() if date else "",
+        "report_date": date,
         "sent_step": f"Delivered {edition.upper()} for ",
         "send_step": f"{prefix} {digest} {edition.upper()} for {date}" if digest else "",
         "mode": mode,
@@ -139,6 +184,9 @@ def main(argv=None):
     except G.DedupeUnavailable:
         print("delivery history unavailable; refusing to send", file=sys.stderr)
         return 3
+    except SettingsError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
     except (ValueError, KeyError, OSError):
         print("invalid digest workflow settings; production recovery requires recovery=true on main; "
               "branch runs require dry_run=true or to", file=sys.stderr)

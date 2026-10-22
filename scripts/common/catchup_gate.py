@@ -17,7 +17,7 @@ import os
 import subprocess
 import sys
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 PT = ZoneInfo("America/Los_Angeles")
@@ -138,7 +138,8 @@ def sent_step_succeeded(report_date, fetch, repo, workflow, sent_step):
 
     Search runs created since report_date minus three days at midnight UTC, with
     a shared request budget. Earlier attempts of matching runs remain included.
-    Accepted reruns of runs created before this window are intentionally invisible.
+    Workflow settings prohibit production reruns and scheduled runs over 36h old,
+    keeping new delivery markers inside this creation-date search window.
     """
     fetch = budgeted_fetch(fetch)
     since = f"{report_date - timedelta(days=3)}T00:00:00Z"
@@ -223,7 +224,13 @@ def main():
             return False
 
     if a.phase == 1:
-        report_date, wait, ok = plan(now, a.tz, a.target)
+        if a.report_date:
+            report_date = date.fromisoformat(a.report_date)
+            wait = max(0.0, (target_for(report_date, a.tz, a.target).astimezone(timezone.utc)
+                             - now.astimezone(timezone.utc)).total_seconds())
+            ok = wait <= MAX_WAIT
+        else:
+            report_date, wait, ok = plan(now, a.tz, a.target)
         if manual:
             wait, ok = 0.0, True
         if not ok:
@@ -237,7 +244,6 @@ def main():
         time.sleep(nap)
         return emit(proceed="true", report_date=report_date, remaining=int(wait - nap))
 
-    from datetime import date
     report_date = date.fromisoformat(a.report_date)
     if not manual:
         time.sleep(phase2_wait(report_date, now_utc(), a.tz, a.target))

@@ -76,6 +76,49 @@ class SmtpTests(unittest.TestCase):
         self.assertNotIn("private@example.com", str(result.exception))
         self.assertNotIn("server-private-body", str(result.exception))
 
+    def test_partial_recipient_refusal_succeeds_with_counts_only(self):
+        smtp_send = self._module()
+        config = {"digests": {"revenue": {"sender": "MarineRadar", "recipients": {
+            "pt": ["accepted@example.com", "refused@example.com"]}}}}
+        output = io.StringIO()
+        with patch.dict(os.environ, {"GMAIL_USER": "sender@example.com", "GMAIL_APP_PASSWORD": "password", "GITHUB_ACTIONS": "false"}), patch.object(smtp_send.smtplib, "SMTP") as transport, contextlib.redirect_stdout(output):
+            transport.return_value.__enter__.return_value.sendmail.return_value = {
+                "refused@example.com": (550, b"private server rejection")}
+            smtp_send.send_digest("revenue", "pt", "private subject", "private body", config=config)
+        self.assertEqual(output.getvalue(), "sent: recipients=1 refused=1\n")
+
+    def test_total_recipient_refusal_fails_without_logging_delivery(self):
+        smtp_send = self._module()
+        config = {"digests": {"revenue": {"sender": "MarineRadar", "recipients": {
+            "pt": ["refused@example.com"]}}}}
+        output = io.StringIO()
+        with patch.dict(os.environ, {"GMAIL_USER": "sender@example.com", "GMAIL_APP_PASSWORD": "password", "GITHUB_ACTIONS": "false"}), patch.object(smtp_send.smtplib, "SMTP") as transport, contextlib.redirect_stdout(output):
+            transport.return_value.__enter__.return_value.sendmail.side_effect = smtp_send.smtplib.SMTPRecipientsRefused({
+                "refused@example.com": (550, b"private server rejection")})
+            with self.assertRaisesRegex(RuntimeError, r"^SMTP delivery failed \(SMTPRecipientsRefused\)$"):
+                smtp_send.send_digest("revenue", "pt", "private subject", "private body", config=config)
+        self.assertEqual(output.getvalue(), "")
+
+    def test_quit_failure_after_acceptance_does_not_trigger_redelivery(self):
+        smtp_send = self._module()
+        config = {"digests": {"revenue": {"sender": "MarineRadar", "recipients": {
+            "pt": ["first@example.com", "second@example.com"]}}}}
+        subject = "private subject"
+        cases = [
+            ({}, f"sent: recipients=2 subject_sha256={hashlib.sha256(subject.encode()).hexdigest()[:8]}\n"),
+            ({"second@example.com": (550, b"private server rejection")},
+             "sent: recipients=1 refused=1\n"),
+        ]
+        for refused, expected in cases:
+            with self.subTest(refused_count=len(refused)):
+                output = io.StringIO()
+                with patch.dict(os.environ, {"GMAIL_USER": "sender@example.com", "GMAIL_APP_PASSWORD": "password", "GITHUB_ACTIONS": "false"}), patch.object(smtp_send.smtplib, "SMTP") as transport, contextlib.redirect_stdout(output):
+                    transport.return_value.__enter__.return_value.sendmail.return_value = refused
+                    transport.return_value.__exit__.side_effect = smtp_send.smtplib.SMTPResponseException(
+                        500, b"QUIT failed: private server response")
+                    smtp_send.send_digest("revenue", "pt", subject, "private body", config=config)
+                self.assertEqual(output.getvalue(), expected)
+
 
 if __name__ == "__main__":
     unittest.main()

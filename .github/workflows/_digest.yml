@@ -30,6 +30,7 @@ permissions:
   actions: read
 
 env:
+  GH_TOKEN: ${{ github.token }}
   EVENT: ${{ github.event_name }}
   SCHEDULE: ${{ github.event.schedule }}
   WORKFLOW: ${{ inputs.workflow }}
@@ -51,8 +52,6 @@ jobs:
     concurrency:
       group: digest-${{ inputs.workflow }}-${{ matrix.digest }}-${{ inputs.edition }}
       cancel-in-progress: false
-    outputs:
-      report_date: ${{ steps.settings.outputs.report_date }}
     env:
       DIGEST: ${{ matrix.digest }}
     steps:
@@ -148,5 +147,5 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Delivered ${{ inputs.edition == 'pt' && 'PT' || 'IST' }} for ${{ needs.email.outputs.report_date }}
+      - name: Delivered ${{ inputs.edition == 'pt' && 'PT' || 'IST' }} for ${{ inputs.report_date }}
         run: echo "All digest deliveries verified"

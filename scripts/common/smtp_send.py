@@ -66,15 +66,23 @@ def send_digest(digest, edition, subject, html, test_to="", config=None):
     message["To"] = ", ".join(recipients)
     message["Subject"] = subject
     message.attach(MIMEText(html, "html", "utf-8"))
+    accepted = False
     try:
         with smtplib.SMTP("smtp.gmail.com", 587, timeout=60) as server:
             server.starttls(context=ssl.create_default_context())
             server.login(user, password)
             refused = server.sendmail(user, recipients, message.as_string())
-            if refused:
-                raise RuntimeError("SMTP recipient refusal")
+            accepted = True
     except Exception as exc:
-        raise RuntimeError(f"SMTP delivery failed ({type(exc).__name__})") from None
+        # A failed QUIT cannot undo sendmail's acceptance. Keep that delivery
+        # successful so a backup run cannot resend an accepted message.
+        if not accepted:
+            raise RuntimeError(f"SMTP delivery failed ({type(exc).__name__})") from None
+    if refused:
+        # SMTP already accepted the message for everyone else. Reporting failure
+        # here would cause a backup run to resend to those accepted recipients.
+        print(f"sent: recipients={len(recipients) - len(refused)} refused={len(refused)}")
+        return
     subject_hash = hashlib.sha256(subject.encode("utf-8")).hexdigest()[:8]
     print(f"sent: recipients={len(recipients)} subject_sha256={subject_hash}")
 

@@ -1,3 +1,5 @@
+import contextlib
+import io
 import os
 import unittest
 from datetime import date, datetime, timedelta, timezone
@@ -83,6 +85,19 @@ class GateDedupeTests(unittest.TestCase):
 
 
 class GateScheduleTests(unittest.TestCase):
+    def test_first_gate_keeps_the_date_frozen_by_settings(self):
+        now = datetime(2026, 10, 21, 23, tzinfo=timezone.utc)
+        argv = ["catchup_gate.py", "--phase", "1", "--event", "schedule",
+                "--report-date", "2026-10-21", "--tz", "America/Los_Angeles", "--target", "05:05"]
+        with patch.object(gate.sys, "argv", argv), patch.object(gate, "now_utc", return_value=now), \
+                patch.object(gate, "already_sent", return_value=False), \
+                patch.object(gate.time, "sleep") as sleep, patch.object(gate, "emit") as emit, \
+                contextlib.redirect_stdout(io.StringIO()):
+            gate.main()
+        self.assertEqual(emit.call_args.kwargs["report_date"], date(2026, 10, 21))
+        self.assertEqual(emit.call_args.kwargs["proceed"], "true")
+        sleep.assert_called_once_with(0)
+
     def test_all_b_crons_fit_gate_cap_and_target_intended_day(self):
         # PT's UTC cron day is the target local date; IST's is the day before.
         report_days = (date(2026, 3, 7), date(2026, 3, 8), date(2026, 10, 31), date(2026, 11, 1))

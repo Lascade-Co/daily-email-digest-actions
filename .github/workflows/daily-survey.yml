@@ -54,12 +54,14 @@ jobs:
     outputs:
       proceed: ${{ steps.timing.outputs.proceed }}
       editions: ${{ steps.settings.outputs.editions }}
-      report_date: ${{ github.event_name == 'schedule' && steps.timing.outputs.report_date || steps.settings.outputs.report_date }}
+      report_date: ${{ steps.settings.outputs.report_date }}
       timezone: ${{ steps.settings.outputs.timezone }}
       sent_step: ${{ steps.settings.outputs.sent_step }}
     steps:
       - name: Resolve edition
         id: settings
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           for file in workflow.py catchup_gate.py; do
             curl -fsSL --retry 3 -o "$file" "$RAW/scripts/common/$file"
@@ -72,12 +74,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           ZONE: ${{ steps.settings.outputs.timezone }}
           SENT_STEP: ${{ steps.settings.outputs.sent_step }}
+          REPORT_DATE: ${{ steps.settings.outputs.report_date }}
         run: |
           if [ "$EVENT" = workflow_dispatch ]; then
             echo 'proceed=true' >> "$GITHUB_OUTPUT"
           else
             python3 catchup_gate.py --phase 1 --event "$EVENT" --workflow "$WORKFLOW" \
-              --sent-step "$SENT_STEP" --tz "$ZONE" --target 05:05
+              --sent-step "$SENT_STEP" --tz "$ZONE" --target 05:05 --report-date "$REPORT_DATE"
           fi
 
   gate2:
@@ -112,13 +115,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        edition: ${{ fromJSON(needs.gate2.outputs.editions) }}
+        include: ${{ fromJSON(needs.gate2.outputs.editions) }}
     uses: ./.github/workflows/_digest.yml
     with:
       workflow: daily-survey.yml
       digests: '["survey_marine","survey_measure"]'
       edition: ${{ matrix.edition }}
-      report_date: ${{ needs.gate2.outputs.report_date }}
+      report_date: ${{ matrix.report_date }}
       dry_run: ${{ inputs.dry_run || false }}
       recovery: ${{ inputs.recovery || false }}
       to: ${{ inputs.to || '' }}
