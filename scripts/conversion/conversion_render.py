@@ -88,6 +88,16 @@ def render(model):
         "Daily conversion digest", "Install → Paid", lead=m["date_str"],
     )
     body += shell.section_open()
+    summary_labels = {"marineradar": "MARINE", "smartruler": "RULER", "geoanimator": "GEO"}
+    summary = shell.stat_grid([
+        (f"{format_pct(app['overall_rate'])}%",
+         summary_labels.get(app["name"].replace(" ", "").lower(), app["name"][:10]),
+         _rate_color(app["overall_rate"]))
+        for app in m["apps"]
+    ])
+    summary = summary.removeprefix('<div style="font-size:0; text-align:center;">\n').removesuffix('</div>\n')
+    summary = summary.replace('\n<![endif]-->\n<!--[if mso]>\n', '\n')
+    body += shell.cell(summary, "16px 40px 0 40px; font-size:0; text-align:center")
     for app in m["apps"]:
         body += shell.cell(shell.h2(app["name"]), "32px 40px 0 40px")
         if not app["has_data"]:

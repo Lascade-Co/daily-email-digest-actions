@@ -80,14 +80,19 @@ class StrictRenderTests(unittest.TestCase):
                     parent = column.parent
                     self.assertEqual(parent.tag, "td")
                     self.assertEqual(parent.attrs["style"], "padding:16px 40px 0 40px; font-size:0; text-align:center;")
-                    self.assertEqual(len(parent.find("div", "stat-col")), 4)
-                    intro = parent.children[0]
-                    self.assertEqual(intro.tag, "p")
-                    self.assertIn("Margin:0 0 20px 0;", intro.attrs["style"])
-                    self.assertIn("text-align:left;", intro.attrs["style"])
+                    is_summary = digest == "conversion" and parent is body_cells[0]
+                    expected_columns = 3 if is_summary else 4
+                    self.assertEqual(len(parent.find("div", "stat-col")), expected_columns)
+                    if is_summary:
+                        self.assertEqual(parent.children, parent.find("div", "stat-col"))
+                    else:
+                        intro = parent.children[0]
+                        self.assertEqual(intro.tag, "p")
+                        self.assertIn("Margin:0 0 20px 0;", intro.attrs["style"])
+                        self.assertIn("text-align:left;", intro.attrs["style"])
                     ghost = "".join(parent.comments)
-                    self.assertIn('width="520" align="center"', ghost)
-                    self.assertEqual(ghost.count('<td valign="top" width="130" align="center">'), 4)
+                    self.assertIn(f'width="{130 * expected_columns}" align="center"', ghost)
+                    self.assertEqual(ghost.count('<td valign="top" width="130" align="center">'), expected_columns)
 
     def test_footers_include_description_links_and_metadata_in_template_sizes(self):
         for digest in ("revenue", "reviews", "conversion"):
