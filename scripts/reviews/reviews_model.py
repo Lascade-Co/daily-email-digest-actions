@@ -1,12 +1,6 @@
 #!/usr/bin/env python3
 """Pure data model: group reviews by app, compute averages, detect language."""
-from datetime import datetime, timezone
-
-DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-MONTHS = ["January", "February", "March", "April", "May", "June",
-          "July", "August", "September", "October", "November", "December"]
-SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+from scripts.common.dates import SHORT_MONTHS, long_date
 
 
 def detect_language(text):
@@ -28,8 +22,7 @@ def _avg_rating(reviews):
 
 def _format_date(dt):
     """'Monday, 20 October 2026'"""
-    day_name = DAYS[dt.weekday()]
-    return f"{day_name}, {dt.day} {MONTHS[dt.month - 1]} {dt.year}"
+    return long_date(dt)
 
 
 def _format_short_date(dt, tz_label=None):

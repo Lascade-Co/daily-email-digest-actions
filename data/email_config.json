@@ -1,59 +1,106 @@
 {
-  "_doc": "Central config for all email digests. Edit this file to change recipients, sender names, or schedules. NOTE: cron values must also be updated in .github/workflows/*.yml (GitHub Actions requires them in YAML).",
-
-  "schedules": {
-    "ist": {
-      "cron": "30 0 * * *",
-      "label": "6:00 AM IST",
-      "tz": "Asia/Kolkata"
-    },
-    "pst": {
-      "cron": "0 14 * * *",
-      "label": "6:00 AM PST",
-      "tz": "America/Los_Angeles"
-    }
-  },
-
+  "_doc": "Digest names, recipients and modules. Editions use local 05:00 cutoffs and 05:55 delivery; cron triggers live in .github/workflows/daily-*.yml.",
   "digests": {
     "revenue": {
-      "subject": "Stripe Web Revenue — MarineRadar",
       "sender": "MarineRadar",
       "recipients": {
-        "ist": ["angelrose@lascade.com","varsha@lascade.com"],
-        "pst": ["cherian@lascade.com"]
-      }
+        "ist": [
+          "angelrose@lascade.com",
+          "varsha@lascade.com"
+        ],
+        "pt": [
+          "cherian@lascade.com"
+        ]
+      },
+      "name": "MarineRadar web revenue",
+      "module": "scripts.revenue.revenue_main",
+      "extra_args": []
     },
     "reviews": {
-      "subject": "App Reviews — 3★ or under",
       "sender": "App Reviews",
       "recipients": {
-        "ist": ["angelrose@lascade.com","adarsh@lascade.com"],
-        "pst": ["cherian@lascade.com"]
-      }
+        "ist": [
+          "angelrose@lascade.com",
+          "adarsh@lascade.com"
+        ],
+        "pt": [
+          "cherian@lascade.com"
+        ]
+      },
+      "name": "App reviews",
+      "module": "scripts.reviews.reviews_main",
+      "extra_args": [
+        "--apps",
+        "data/reviews_apps.json"
+      ]
     },
     "survey_marine": {
-      "subject": "Marine Radar Survey Responses",
       "sender": "MarineRadar",
       "recipients": {
-        "ist": ["angelrose@lascade.com","adarsh@lascade.com"],
-        "pst": ["cherian@lascade.com"]
-      }
+        "ist": [
+          "angelrose@lascade.com",
+          "adarsh@lascade.com"
+        ],
+        "pt": [
+          "cherian@lascade.com"
+        ]
+      },
+      "name": "MarineRadar surveys",
+      "module": "scripts.survey.survey_main",
+      "extra_args": [
+        "--digest",
+        "survey_marine",
+        "--config",
+        "data/survey_marine.json"
+      ]
     },
     "survey_measure": {
-      "subject": "Smart Ruler Survey Responses",
       "sender": "Smart Ruler",
       "recipients": {
-        "ist": ["angelrose@lascade.com"],
-        "pst": ["cherian@lascade.com"]
-      }
+        "ist": [
+          "angelrose@lascade.com"
+        ],
+        "pt": [
+          "cherian@lascade.com"
+        ]
+      },
+      "name": "Smart Ruler surveys",
+      "module": "scripts.survey.survey_main",
+      "extra_args": [
+        "--digest",
+        "survey_measure",
+        "--config",
+        "data/survey_measure.json"
+      ]
     },
     "conversion": {
-      "subject": "Install → Paid Conversion Report",
       "sender": "Lascade Apps",
       "recipients": {
-        "ist": ["angelrose@lascade.com"],
-        "pst": ["cherian@lascade.com"]
-      }
+        "ist": [
+          "angelrose@lascade.com"
+        ],
+        "pt": [
+          "cherian@lascade.com"
+        ]
+      },
+      "name": "Install → Paid",
+      "module": "scripts.conversion.conversion_main",
+      "extra_args": [
+        "--apps",
+        "data/conversion_apps.json"
+      ]
+    }
+  },
+  "editions": {
+    "pt": {
+      "tz": "America/Los_Angeles",
+      "label": "PT",
+      "delivery": "05:55"
+    },
+    "ist": {
+      "tz": "Asia/Kolkata",
+      "label": "IST",
+      "delivery": "05:55"
     }
   }
 }

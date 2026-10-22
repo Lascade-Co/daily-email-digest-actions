@@ -4,9 +4,6 @@ import json
 import sys
 from urllib.parse import quote
 
-import requests
-from google.auth.transport.requests import Request
-from google.oauth2 import service_account
 
 _SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets.readonly"
 _TRANSLATE_SCOPE = "https://www.googleapis.com/auth/cloud-translation"
@@ -21,6 +18,7 @@ class FetchError(Exception):
 
 def list_sheet_tabs(sa_info, sheet_id):
     """Return a list of all tab names in the spreadsheet."""
+    import requests
     creds = _get_credentials(sa_info, [_SHEETS_SCOPE])
     url = f"{_SHEETS_BASE}/{sheet_id}?fields=sheets.properties.title"
     resp = requests.get(url, headers={"Authorization": f"Bearer {creds.token}"}, timeout=30)
@@ -31,6 +29,8 @@ def list_sheet_tabs(sa_info, sheet_id):
 
 
 def _get_credentials(sa_info, scopes):
+    from google.auth.transport.requests import Request
+    from google.oauth2 import service_account
     creds = service_account.Credentials.from_service_account_info(sa_info, scopes=scopes)
     creds.refresh(Request())
     return creds
@@ -38,12 +38,12 @@ def _get_credentials(sa_info, scopes):
 
 def fetch_sheet_tab(sa_info, sheet_id, tab_name):
     """Return rows (list of lists) for *tab_name*, header row excluded."""
+    import requests
     creds = _get_credentials(sa_info, [_SHEETS_SCOPE])
     url = f"{_SHEETS_BASE}/{sheet_id}/values/{quote(tab_name, safe='')}?dateTimeRenderOption=SERIAL_NUMBER"
     resp = requests.get(url, headers={"Authorization": f"Bearer {creds.token}"}, timeout=30)
     if resp.status_code != 200:
-        err_body = resp.text[:200] if resp.text else "(empty)"
-        print(f"sheets {resp.status_code} for {tab_name}: {err_body}", file=sys.stderr)
+        print(f"sheets: HTTP {resp.status_code}", file=sys.stderr)
         raise FetchError(f"sheets-{resp.status_code}")
     values = resp.json().get("values", [])
     return values[1:] if len(values) > 1 else []
@@ -51,6 +51,7 @@ def fetch_sheet_tab(sa_info, sheet_id, tab_name):
 
 def translate_text(sa_info, text, target="en"):
     """Translate *text* to *target* via Cloud Translation v2. Returns original on failure."""
+    import requests
     if not text or len(text) < 3:
         return text
     try:

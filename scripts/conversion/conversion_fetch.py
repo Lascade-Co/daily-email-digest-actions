@@ -4,7 +4,6 @@
 Endpoint docs: https://adapty.io/docs/api-export-analytics/operations/retrieveConversionData
 Never logs API keys or response bodies.
 """
-import requests
 
 
 def fetch_install_to_paid(api_key, date_from, date_to, tz="UTC"):
@@ -29,6 +28,8 @@ def fetch_install_to_paid(api_key, date_from, date_to, tz="UTC"):
         }
         Cohorts are sorted newest-first.
     """
+    import requests
+
     url = "https://api-admin.adapty.io/api/v1/client-api/metrics/conversion/"
     headers = {
         "Authorization": f"Api-Key {api_key}",
@@ -65,12 +66,16 @@ def fetch_install_to_paid(api_key, date_from, date_to, tz="UTC"):
             return _empty()
 
         cohorts = []
+        outside_window = False
         for v in total_row.get("values", []):
             date_str = str(v.get("x", ""))[:10]
+            if not date_from <= date_str <= date_to:
+                outside_window = True
+                continue
             installs = int(v.get("value_from", 0))
             paid = int(v.get("value_to", 0))
             rate = float(v.get("y", 0.0))
-            if date_str and installs > 0:
+            if installs > 0:
                 cohorts.append({
                     "date": date_str,
                     "installs": installs,
@@ -80,14 +85,24 @@ def fetch_install_to_paid(api_key, date_from, date_to, tz="UTC"):
 
         cohorts.sort(key=lambda c: c["date"], reverse=True)
 
+        # If the API includes an out-of-range cohort, its aggregate must not
+        # smuggle that cohort back into the digest after row filtering.
+        total_installs = int(total_row.get("value_from", 0))
+        total_paid = int(total_row.get("value_to", 0))
+        overall_rate = float(total_row.get("value", 0))
+        if outside_window:
+            total_installs = sum(cohort["installs"] for cohort in cohorts)
+            total_paid = sum(cohort["paid"] for cohort in cohorts)
+            overall_rate = total_paid / total_installs * 100 if total_installs else 0.0
+
         return {
-            "overall_rate": float(total_row.get("value", 0)),
-            "total_installs": int(total_row.get("value_from", 0)),
-            "total_paid": int(total_row.get("value_to", 0)),
+            "overall_rate": overall_rate,
+            "total_installs": total_installs,
+            "total_paid": total_paid,
             "cohorts": cohorts,
         }
-    except Exception as e:
-        print(f"adapty conversion: request failed ({e})")
+    except Exception:
+        print("adapty conversion: request failed")
         return _empty()
 
 

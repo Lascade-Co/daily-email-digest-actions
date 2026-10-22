@@ -1,11 +1,7 @@
 #!/usr/bin/env python3
 """Pure data model for the conversion digest. No I/O, no clock."""
 
-DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-MONTHS = ["January", "February", "March", "April", "May", "June",
-          "July", "August", "September", "October", "November", "December"]
-SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+from scripts.common.dates import SHORT_MONTHS, long_date
 
 
 def format_pct(rate):
@@ -53,7 +49,7 @@ def build_model(apps_config, app_data, now_dt, display_tz=None):
         })
 
     disp_now = now_dt.astimezone(display_tz) if display_tz else now_dt
-    date_str = f"{DAYS[disp_now.weekday()]}, {disp_now.day} {MONTHS[disp_now.month - 1]} {disp_now.year}"
+    date_str = long_date(disp_now)
 
     return {
         "apps": apps,

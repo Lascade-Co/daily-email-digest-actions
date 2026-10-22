@@ -1,0 +1,152 @@
+name: Build and deliver a digest edition
+
+on:
+  workflow_call:
+    inputs:
+      workflow:
+        type: string
+        required: true
+      digests:
+        type: string
+        required: true
+      edition:
+        type: string
+        required: true
+      report_date:
+        type: string
+        default: ''
+      dry_run:
+        type: boolean
+        default: false
+      to:
+        type: string
+        default: ''
+      recovery:
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  EVENT: ${{ github.event_name }}
+  SCHEDULE: ${{ github.event.schedule }}
+  WORKFLOW: ${{ inputs.workflow }}
+  INPUT_EDITION: ${{ inputs.edition }}
+  REPORT_DATE: ${{ inputs.report_date }}
+  DRY_RUN: ${{ inputs.dry_run }}
+  RECOVERY: ${{ inputs.recovery }}
+  TEST_MODE: ${{ inputs.to != '' }}
+
+jobs:
+  email:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        digest: ${{ fromJSON(inputs.digests) }}
+    # A scheduled run and a manual recovery share the same lock.
+    concurrency:
+      group: digest-${{ inputs.workflow }}-${{ matrix.digest }}-${{ inputs.edition }}
+      cancel-in-progress: false
+    outputs:
+      report_date: ${{ steps.settings.outputs.report_date }}
+    env:
+      DIGEST: ${{ matrix.digest }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          sparse-checkout: |
+            scripts
+            data
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - name: Install dependencies
+        run: pip install --quiet requests==2.34.2 pyjwt==2.13.0 cryptography==50.0.0 google-auth==2.56.3 langdetect==1.0.9
+      - name: Resolve edition and report day
+        id: settings
+        run: python3 scripts/common/workflow.py settings
+      - name: Resolve digest arguments
+        id: args
+        env:
+          REPORT_DATE: ${{ steps.settings.outputs.report_date }}
+        run: python3 scripts/common/workflow.py digest-args
+      - name: Build email
+        env:
+          BUILD_ARGS: ${{ steps.args.outputs.argv }}
+          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+          GOOGLE_SA_KEY: ${{ secrets.GOOGLE_SA_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          ADAPTY_KEY_MARINERADAR: ${{ secrets.ADAPTY_KEY_MARINERADAR }}
+          ADAPTY_KEY_SMARTRULER: ${{ secrets.ADAPTY_KEY_SMARTRULER }}
+          ADAPTY_KEY_GEOANIMATOR: ${{ secrets.ADAPTY_KEY_GEOANIMATOR }}
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess, sys
+          subprocess.run([sys.executable, *json.loads(os.environ['BUILD_ARGS'])], check=True)
+          PY
+      - name: Hold until 05:55 local
+        if: ${{ github.event_name == 'schedule' }}
+        env:
+          REPORT_DATE: ${{ steps.settings.outputs.report_date }}
+          ZONE: ${{ steps.settings.outputs.timezone }}
+        run: python3 scripts/common/hold.py --report-date "$REPORT_DATE" --tz "$ZONE" --target 05:55
+      - name: Check delivery history inside the lock
+        id: dedupe
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPORT_DATE: ${{ steps.settings.outputs.report_date }}
+        run: python3 scripts/common/workflow.py dedupe
+      - name: Encrypt preview
+        if: ${{ inputs.dry_run }}
+        env:
+          PREVIEW_KEY: ${{ secrets.PREVIEW_KEY }}
+        run: |
+          test -n "$PREVIEW_KEY" || { echo "PREVIEW_KEY is required" >&2; exit 1; }
+          tar czf - out | openssl enc -aes-256-cbc -pbkdf2 -salt -pass env:PREVIEW_KEY -out preview.tar.gz.enc
+      - name: ${{ inputs.dry_run && steps.settings.outputs.send_step || 'Preview upload (disabled)' }}
+        if: ${{ inputs.dry_run }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: preview-${{ matrix.digest }}-${{ inputs.edition }}
+          path: preview.tar.gz.enc
+          if-no-files-found: error
+          retention-days: 3
+      # Keep this last: production success records SMTP acceptance or a verified
+      # prior acceptance. No post-send step can hide a successful delivery.
+      - name: ${{ steps.settings.outputs.send_step }}
+        if: ${{ !inputs.dry_run }}
+        env:
+          ALREADY_SENT: ${{ steps.dedupe.outputs.sent }}
+          EDITION: ${{ inputs.edition }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+        run: |
+          if [ "$ALREADY_SENT" = True ]; then
+            echo "Prior delivery verified; no additional message sent"
+          else
+            FLAGS=()
+            if [ "$TEST_MODE" = true ]; then
+              TEST_TO=$(python3 -c 'import json, os; print(json.load(open(os.environ["GITHUB_EVENT_PATH"]))["inputs"]["to"])')
+              test -n "$TEST_TO"
+              FLAGS+=(--to "$TEST_TO")
+            fi
+            python3 scripts/common/smtp_send.py --digest "$DIGEST" --edition "$EDITION" \
+              --subject-file "out/$DIGEST-$EDITION.subject.txt" --html-file "out/$DIGEST-$EDITION.html" "${FLAGS[@]}"
+          fi
+
+  done:
+    needs: email
+    if: ${{ !inputs.dry_run && inputs.to == '' && needs.email.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Delivered ${{ inputs.edition == 'pt' && 'PT' || 'IST' }} for ${{ needs.email.outputs.report_date }}
+        run: echo "All digest deliveries verified"

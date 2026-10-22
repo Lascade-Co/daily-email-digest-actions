@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Pure data model for the revenue digest. No I/O, no clock."""
 from collections import defaultdict
+from scripts.common.dates import SHORT_MONTHS, long_date
 
 
 def format_money(amount):
@@ -35,23 +36,16 @@ def build_model(today_charges, today_refunds, month_charges, month_refunds, now_
         for key, v in sorted(by_pack.items(), key=lambda kv: float(kv[0]))
     ]
 
-    # Date formatting
-    days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-    months = ["January", "February", "March", "April", "May", "June",
-              "July", "August", "September", "October", "November", "December"]
-    short_months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-
     disp_now = now_dt.astimezone(display_tz) if display_tz else now_dt
     disp_cutoff = cutoff_dt.astimezone(display_tz) if display_tz else cutoff_dt
     tz_label = f" {disp_cutoff.strftime('%Z')}" if display_tz else ""
 
-    date_str = f"{days[disp_now.weekday()]}, {disp_now.day} {months[disp_now.month - 1]} {disp_now.year}"
+    date_str = long_date(disp_now)
     cutoff_hour = disp_cutoff.hour % 12 or 12
     cutoff_ampm = "AM" if disp_cutoff.hour < 12 else "PM"
-    cutoff_str = f"{disp_cutoff.day} {short_months[disp_cutoff.month - 1]} {cutoff_hour}:{disp_cutoff.minute:02d} {cutoff_ampm}{tz_label}"
+    cutoff_str = f"{disp_cutoff.day} {SHORT_MONTHS[disp_cutoff.month - 1]} {cutoff_hour}:{disp_cutoff.minute:02d} {cutoff_ampm}{tz_label}"
 
-    month_label = f"1–{now_dt.day} {short_months[now_dt.month - 1]} {now_dt.year}"
+    month_label = f"1–{disp_now.day} {SHORT_MONTHS[disp_now.month - 1]} {disp_now.year}"
 
     # Purchase Source Breakdown — commented out until metadata property is configured
     # TODO: Uncomment when purchase_source metadata key is set in Stripe

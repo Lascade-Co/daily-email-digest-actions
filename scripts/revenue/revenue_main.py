@@ -1,109 +1,60 @@
 #!/usr/bin/env python3
-"""Orchestrator for the daily revenue digest. Fetch, model, render, send.
-
-  python3 revenue_main.py --report-date 2026-10-20 \
-      --recipients angel@…,cherian@… [--dry-run] [--to angel@…]
-
-Public repo — never log amounts, charge IDs, or response bodies.
-"""
+"""Build or send the revenue digest for an edition-local report date."""
 import argparse
-import json
+from datetime import date, datetime, timezone
 import os
-import smtplib
+from pathlib import Path
 import sys
-from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 
-from revenue_fetch import fetch_charges, fetch_refunds
-from revenue_model import build_model
-from revenue_render import render
+ROOT = Path(__file__).resolve().parents[2]
+if __package__ in (None, ""):
+    sys.path.insert(0, str(ROOT))
 
-
-def _mask(value):
-    for line in str(value).splitlines():
-        if line.strip():
-            print(f"::add-mask::{line}")
+from scripts.common.dates import report_date_for, subject, window_for
+from scripts.common.smtp_send import load_config, mask, send_digest, write_preview
+from scripts.revenue.revenue_fetch import fetch_charges, fetch_refunds
+from scripts.revenue.revenue_model import build_model
+from scripts.revenue.revenue_render import render
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--report-date", required=True, help="YYYY-MM-DD")
-    ap.add_argument("--recipients", default="", help="Comma-separated production recipients")
-    ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--to", default="", help="Test mode: send [TEST] email to this address only")
-    ap.add_argument("--tz", default="UTC", help="Display timezone (e.g. Asia/Kolkata, America/Los_Angeles)")
-    ap.add_argument("--sender", default="MarineRadar", help="Sender display name")
-    a = ap.parse_args()
-
-    display_tz = ZoneInfo(a.tz)
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--edition", choices=("pt", "ist"), default="pt")
+    parser.add_argument("--report-date", type=date.fromisoformat)
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--to", default="", help="Send a [TEST] email to this address only")
+    args = parser.parse_args(argv)
+    config = load_config()
+    tz = ZoneInfo(config["editions"][args.edition]["tz"])
+    report_date = args.report_date or report_date_for(datetime.now(timezone.utc), tz)
+    start, end = window_for(report_date, tz)
+    month_start = end.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    since, until = int(start.timestamp()), int(end.timestamp())
+    month_since = int(month_start.timestamp())
 
     stripe_key = os.environ.get("STRIPE_API_KEY", "")
-    gmail_user = os.environ.get("GMAIL_USER", "")
-    gmail_password = os.environ.get("GMAIL_APP_PASSWORD", "")
     if not stripe_key:
-        sys.exit("STRIPE_API_KEY not set")
-    _mask(stripe_key)
-    if gmail_password:
-        _mask(gmail_password)
-
-    report_date = datetime.strptime(a.report_date, "%Y-%m-%d").date()
-    now_utc = datetime.now(timezone.utc)
-
-    cutoff_24h = now_utc - timedelta(hours=24)
-    since_unix = int(cutoff_24h.timestamp())
-
-    month_start = datetime(report_date.year, report_date.month, 1, tzinfo=timezone.utc)
-    month_since_unix = int(month_start.timestamp())
-
-    print(f"fetching charges since {cutoff_24h.isoformat()}")
-    today_charges = fetch_charges(stripe_key, since_unix)
-    print(f"today charges: {len(today_charges)}")
-    today_refunds = fetch_refunds(stripe_key, since_unix)
-    print(f"today refunds: {len(today_refunds)}")
-
-    month_charges = fetch_charges(stripe_key, month_since_unix)
-    print(f"month charges: {len(month_charges)}")
-    month_refunds = fetch_refunds(stripe_key, month_since_unix)
-    print(f"month refunds: {len(month_refunds)}")
-
+        raise ValueError("STRIPE_API_KEY not set")
+    mask(stripe_key)
+    today_charges = fetch_charges(stripe_key, since, until)
+    today_refunds = fetch_refunds(stripe_key, since, until)
+    month_charges = fetch_charges(stripe_key, month_since, until)
+    month_refunds = fetch_refunds(stripe_key, month_since, until)
+    print(f"records: daily_charges={len(today_charges)} daily_refunds={len(today_refunds)} "
+          f"month_charges={len(month_charges)} month_refunds={len(month_refunds)}")
     model = build_model(today_charges, today_refunds, month_charges, month_refunds,
-                        now_utc, cutoff_24h, display_tz=display_tz)
-    subject, html = render(model)
-
-    if a.dry_run:
-        print(f"subject: {subject}")
-        print(f"html length: {len(html)}")
-        with open("revenue-email.html", "w") as f:
-            f.write(html)
-        print("wrote revenue-email.html")
-        return
-
-    if not gmail_user or not gmail_password:
-        sys.exit("GMAIL_USER / GMAIL_APP_PASSWORD not set")
-
-    if a.to:
-        recipients = [a.to]
-        prefix = "[TEST] "
-    elif a.recipients:
-        recipients = [r.strip() for r in a.recipients.split(",") if r.strip()]
-        prefix = ""
+                        end, start, display_tz=tz)
+    tail, html = render(model)
+    title = subject(config["digests"]["revenue"]["name"], report_date, tail)
+    if args.dry_run:
+        write_preview("revenue", args.edition, title, html)
     else:
-        sys.exit("Either --to or --recipients must be provided")
-
-    msg = MIMEMultipart("alternative")
-    msg["From"] = f"{a.sender} <{gmail_user}>"
-    msg["To"] = ", ".join(recipients)
-    msg["Subject"] = f"{prefix}{subject}"
-    msg.attach(MIMEText(html, "html"))
-
-    with smtplib.SMTP("smtp.gmail.com", 587) as server:
-        server.starttls()
-        server.login(gmail_user, gmail_password)
-        server.sendmail(gmail_user, recipients, msg.as_string())
-    print(f"sent to {', '.join(recipients)}")
+        send_digest("revenue", args.edition, title, html, test_to=args.to, config=config)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as exc:
+        raise SystemExit(f"Revenue digest failed ({type(exc).__name__})") from None

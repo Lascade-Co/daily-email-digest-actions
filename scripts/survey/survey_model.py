@@ -2,6 +2,7 @@
 """Pure data layer: filter, detect language, build the email model. No I/O."""
 from collections import Counter
 from datetime import datetime, timedelta, timezone
+from scripts.common.dates import SHORT_MONTHS, long_date
 
 try:
     from langdetect import detect as _detect
@@ -10,7 +11,6 @@ except ImportError:
 
 _TIMESTAMP_FMTS = [
     "%m/%d/%Y %H:%M:%S",
-    "%Y-%m-%dT%H:%M:%S.%fZ",
     "%Y-%m-%dT%H:%M:%S",
     "%Y-%m-%d %H:%M:%S",
     "%d/%m/%Y %H:%M:%S",
@@ -61,6 +61,16 @@ def _parse_ts(raw, tz=None, now_utc=None):
                 return result
     except (ValueError, OverflowError):
         pass
+    # An explicit offset (including Z) belongs to the timestamp, not the sheet.
+    try:
+        dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=tz)
+        result = _accept(dt)
+        if result:
+            return result
+    except ValueError:
+        pass
     for fmt in _TIMESTAMP_FMTS:
         try:
             dt = datetime.strptime(raw, fmt).replace(tzinfo=tz)
@@ -69,22 +79,17 @@ def _parse_ts(raw, tz=None, now_utc=None):
                 return result
         except ValueError:
             continue
-    try:
-        dt = datetime.fromisoformat(raw).replace(tzinfo=tz)
-        return _accept(dt)
-    except Exception:
-        pass
     return None
 
 
 def filter_new_responses(rows, cutoff_dt, tz=None, now_utc=None):
-    """Return rows whose timestamp (col 0) is after *cutoff_dt*."""
+    """Return rows in [cutoff_dt, now_utc); now_utc is the report cutoff."""
     out = []
     for row in rows:
         if not row:
             continue
         ts = _parse_ts(row[0], tz, now_utc=now_utc)
-        if ts and ts > cutoff_dt:
+        if ts and cutoff_dt <= ts and (now_utc is None or ts < now_utc):
             out.append(row)
     return out
 
@@ -174,8 +179,8 @@ def _llm_group(texts, gemini_key):
         raw = data["candidates"][0]["content"]["parts"][0]["text"]
         groups = json.loads(raw)
         return [{"text": g["summary"], "count": g["count"]} for g in groups]
-    except Exception as e:
-        log.warning("Gemini grouping failed, falling back to simple: %s", e)
+    except Exception:
+        log.warning("Gemini grouping failed, falling back to simple")
         return None
 
 
@@ -463,23 +468,15 @@ def build_model(config, fetched_tabs, cutoff_dt, now_dt, translate_fn=None, disp
                 "has_status": has_status,
             })
 
-    weekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-    months = [
-        "January", "February", "March", "April", "May", "June",
-        "July", "August", "September", "October", "November", "December",
-    ]
-    short_months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-
     disp_now = now_dt.astimezone(display_tz) if display_tz else now_dt
     disp_cutoff = cutoff_dt.astimezone(display_tz) if display_tz else cutoff_dt
     tz_label = f" {disp_cutoff.strftime('%Z')}" if display_tz else ""
 
-    date_str = f"{weekdays[disp_now.weekday()]}, {disp_now.day} {months[disp_now.month - 1]} {disp_now.year}"
+    date_str = long_date(disp_now)
 
     cutoff_h = disp_cutoff.hour % 12 or 12
     cutoff_ampm = "AM" if disp_cutoff.hour < 12 else "PM"
-    cutoff_str = f"{disp_cutoff.day} {short_months[disp_cutoff.month - 1]} {cutoff_h}:{disp_cutoff.minute:02d} {cutoff_ampm}{tz_label}"
+    cutoff_str = f"{disp_cutoff.day} {SHORT_MONTHS[disp_cutoff.month - 1]} {cutoff_h}:{disp_cutoff.minute:02d} {cutoff_ampm}{tz_label}"
 
     return {
         "product_name": config.get("product_name", "Survey"),
