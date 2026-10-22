@@ -54,7 +54,7 @@ class SurveyMobileTests(unittest.TestCase):
         ))
         cells = Document(html).root.find("table")[0].find("td")
         self.assertEqual(len(cells), 4)
-        self.assertEqual(cells[0].find("strong")[0].text, "Frigate")
+        self.assertEqual(cells[0].find("strong")[0].text, "Type: Frigate")
         self.assertEqual(cells[0].find("span", "text-muted")[0].text, "Country: Britain")
         self.assertEqual(cells[1].find("strong")[0].text, "Calypso")
         self.assertFalse(cells[1].find("span"))
@@ -64,6 +64,31 @@ class SurveyMobileTests(unittest.TestCase):
         self.assertEqual(cells[3].find("strong")[0].text, "Zero")
         self.assertEqual(cells[3].find("span", "text-muted")[0].text, "IMO 0")
         self.assertNotIn("—", html)
+
+    def test_blank_vessel_primary_keeps_the_imo_label(self):
+        for blank in ("", "  ", "—", " — ", None):
+            with self.subTest(vessel=blank):
+                html = survey_render._response_table(response_section(
+                    ["Vessel", "IMO", "Type", "Country", "Details"],
+                    [[blank, "9876543", "tanker", "Benin", "—"]],
+                ))
+                table = Document(html).root.find("table")[0]
+                self.assertEqual([header.text for header in table.find("th")], ["Vessel"])
+                self.assertEqual(table.find("strong")[0].text, "IMO 9876543")
+                self.assertEqual(table.find("span", "text-muted")[0].text,
+                                 "Type: tanker · Country: Benin")
+
+    def test_fallback_primary_escapes_its_original_label_and_value(self):
+        html = survey_render._response_table(response_section(
+            ["Vessel", 'IM<O> & "code"', "Type", "Country"],
+            [[None, "1 <2> & 3", "—", ""]],
+        ))
+        cell = Document(html).root.find("table")[0].find("td")[0]
+        primary = cell.find("strong")[0]
+        self.assertEqual(primary.text, 'IM<O> & "code": 1 <2> & 3')
+        self.assertFalse(primary.children)
+        self.assertIn('<strong>IM&lt;O&gt; &amp; &quot;code&quot;: 1 &lt;2&gt; &amp; 3</strong>', html)
+        self.assertFalse(cell.find("span"))
 
     def test_record_captions_escape_labels_and_keep_labels_with_nonempty_values(self):
         html = survey_render._response_table(response_section(

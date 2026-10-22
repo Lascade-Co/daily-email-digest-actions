@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Pure product-agnostic survey renderer built on the shared email shell."""
 from html import escape
+from math import ceil
 import re
 
 from scripts.common import email_shell as shell
@@ -59,6 +60,22 @@ def _summary(summary):
     return body
 
 
+def _response_widths(headers):
+    """Budget 333px for whole header words, then expand free-text columns."""
+    # Round minimum shares up to hundredths of a percent so formatting never
+    # takes width away from a header. Inter uppercase is estimated at 9.5px.
+    shares = [ceil((max((len(word) for word in str(header).upper().split()), default=0)
+                    * 9.5 + 24) * 10000 / 333) for header in headers]
+    choice_headers = {"status", "score", "frequency", "got measurement?"}
+    text_columns = [index for index, header in enumerate(headers)
+                    if str(header).strip().lower() not in choice_headers]
+    recipients = text_columns or list(range(len(headers)))
+    extra, remainder = divmod(max(0, 10000 - sum(shares)), len(recipients))
+    for offset, index in enumerate(recipients):
+        shares[index] += extra + (offset < remainder)
+    return [f"{share / 100:.2f}%" for share in shares]
+
+
 def _response_table(section):
     headers = (["Status"] if section["has_status"] else []) + list(section["columns"])
     rows = []
@@ -66,14 +83,19 @@ def _response_table(section):
         status = [response.get("status_label") or "Free"] if section["has_status"] else []
         rows.append(status + [cell["value"] for cell in response["cells"]])
     if len(headers) < 4:
-        return shell.table(headers, rows)
+        widths = _response_widths(headers) if len(headers) in (2, 3) else None
+        return shell.table(headers, rows, widths=widths)
 
     records = []
     for row in rows:
         fields = [(str(header), str(value).strip())
                   for header, value in zip(headers, row) if value is not None]
         fields = [(header, value) for header, value in fields if value and value != "—"]
-        record = '<strong>' + escape(fields[0][1]) + '</strong>' if fields else ''
+        primary = fields[0][1] if fields else ''
+        if fields and (row[0] is None or str(row[0]).strip() in ('', '—')):
+            header = fields[0][0]
+            primary = header + (' ' if header == 'IMO' else ': ') + primary
+        record = '<strong>' + escape(primary) + '</strong>' if fields else ''
         if len(fields) > 1:
             caption = ' · '.join(
                 header + (' ' if header == 'IMO' else ': ') + value
