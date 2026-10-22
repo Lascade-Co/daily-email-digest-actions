@@ -115,8 +115,6 @@ jobs:
     name: deliver (${{ matrix.edition }})
     runs-on: ubuntu-latest
     timeout-minutes: 120
-    # The token is an environment secret limited to main.
-    environment: ta-dispatch
     strategy:
       fail-fast: false
       matrix:
@@ -153,7 +151,7 @@ jobs:
           MODE: ${{ github.event_name == 'schedule' && 'scheduled' || inputs.mode }}
           TEST_TO: ${{ inputs.to }}
         run: |
-          test -n "$GH_TOKEN" || { echo "TA_DIGEST_DISPATCH_TOKEN is not set in the ta-dispatch environment" >&2; exit 1; }
+          test -n "$GH_TOKEN" || { echo "TA_DIGEST_DISPATCH_TOKEN repository secret is not set" >&2; exit 1; }
           python3 -m scripts.ta_trigger.trigger deliver
 
   # GitHub disables scheduled workflows in public repos after 60 days without

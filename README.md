@@ -37,7 +37,8 @@ only, no markers) and `mode=recovery` (production now, `main` only; TA's markers
 Manual runs skip the sleeps and the hold.
 
 It needs the fine-grained token `TA_DIGEST_DISPATCH_TOKEN` (resource owner Lascade-Co, only TA-daily-issues-digest,
-Actions: read and write) as a secret of the `ta-dispatch` environment, whose deployment branches are limited to `main`.
+Actions: read and write) as a repository secret. Only the dated deliver step reads it. (A `main`-only environment
+secret would be tighter; creating one needs repository admin.)
 When it expires, the deliver step fails and TA's own late fallback crons still deliver.
 
 ## Manual runs and encrypted previews

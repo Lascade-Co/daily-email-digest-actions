@@ -266,7 +266,6 @@ class WorkflowTests(unittest.TestCase):
         users = [(name, step.get("name")) for name, job in jobs.items() for step in job.get("steps", [])
                  if "TA_DIGEST_DISPATCH_TOKEN" in json.dumps(step)]
         self.assertEqual(users, [("deliver", "${{ matrix.step }}")])
-        self.assertEqual(jobs["deliver"]["environment"], "ta-dispatch")
         self.assertNotIn("pull_request", self.wf["on"])
         self.assertNotIn("pull_request_target", self.wf["on"])
 
