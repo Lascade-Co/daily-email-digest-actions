@@ -1,4 +1,5 @@
 """Render contracts taken from the approved email component reference."""
+from datetime import date, timedelta
 from html.parser import HTMLParser
 import json
 import re
@@ -165,6 +166,29 @@ class StrictRenderTests(unittest.TestCase):
                 labels = [f"{ticks['min'] + index * ticks['stepSize']:.{precision}f}%" for index in range(count)]
                 self.assertEqual(len(labels), len(set(labels)))
                 self.assertGreaterEqual(count, 2)
+
+    def test_final_percentage_has_space_when_last_axis_tick_is_skipped(self):
+        for rate in (0.0, 1.2, 100.0):
+            with self.subTest(rate=rate):
+                model = fixture_models()["conversion"]
+                model["apps"] = model["apps"][:1]
+                app = model["apps"][0]
+                app["cohorts"] = [dict(
+                    app["cohorts"][0],
+                    date=(date(2026, 10, 20) - timedelta(days=index)).isoformat(),
+                    rate=rate if index == 0 else rate + 0.2,
+                ) for index in range(14)]
+                config = chart_config(render_tree("conversion", model).find("img")[0])
+                labels = config["options"]["plugins"]["datalabels"]
+                self.assertEqual(labels["formatter"], "function(v){return v.toFixed(2)+'%'}")
+                self.assertEqual(labels["display"], [False] * 13 + [True])
+                self.assertFalse(labels.get("clip", False))
+                # QuickChart does not reserve room for datalabels automatically.
+                # These margins keep the entire percentage inside the PNG even
+                # without a final x-axis tick or with the final point at the top.
+                padding = config["options"].get("layout", {}).get("padding", {})
+                self.assertGreaterEqual(padding.get("right", 0), 32)
+                self.assertGreaterEqual(padding.get("top", 0), 24)
 
 
 if __name__ == "__main__":

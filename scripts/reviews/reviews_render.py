@@ -57,8 +57,8 @@ def render(model):
         "Margin:0;", "Margin:0 0 20px 0;", 1
     ).replace("color:#222222;", "color:#222222; text-align:left;", 1)
     grid = shell.stat_grid([
-        (count, "Reviews ≤3★", shell.INK),
-        (f"{m['overall_avg']:.1f} ★" if count else "—", "Average rating", _rating_color(m["overall_avg"])),
+        (count, "Low reviews", shell.INK),
+        (f"{m['overall_avg']:.1f} ★" if count else "—", "Avg rating", _rating_color(m["overall_avg"])),
         (sum(len(app["appstore_reviews"]) for app in m["apps"]), "App Store", shell.INK),
         (sum(len(app["playstore_reviews"]) for app in m["apps"]), "Play Store", shell.INK),
     ])

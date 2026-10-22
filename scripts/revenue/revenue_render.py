@@ -25,9 +25,9 @@ def render(model):
         "color:#222222;", "color:#222222; text-align:left;", 1
     )
     stats = shell.stat_grid([
-        (m["today_count"], "Daily purchases", shell.GREEN),
-        (m["today_refund_count"], "Daily refunds", shell.RED),
-        (m["month_count"], "MTD purchases", shell.INK),
+        (m["today_count"], "Purchases", shell.GREEN),
+        (m["today_refund_count"], "Refunds", shell.RED),
+        (m["month_count"], "MTD sales", shell.INK),
         (m["month_refund_count"], "MTD refunds", shell.RED),
     ])
     # The reference places zero font size and centering on the body cell,

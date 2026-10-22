@@ -80,6 +80,9 @@ def _line_chart(app):
         },
         "options": {
             "legend": {"display": False},
+            # The last x-axis tick may be skipped, so explicitly reserve space
+            # for the final percentage label above the point and inside the PNG.
+            "layout": {"padding": {"top": 24, "right": 32}},
             "scales": {
                 "yAxes": [{
                     "ticks": ticks,
@@ -137,7 +140,7 @@ def _stats(app):
         '</p>'
     )
     grid = shell.stat_grid([
-        (f"{format_pct(app['overall_rate'])}%", "Install → Paid", _rate_color(app["overall_rate"])),
+        (f"{format_pct(app['overall_rate'])}%", "Rate", _rate_color(app["overall_rate"])),
         (format_num(app["total_installs"]), "Installs", shell.INK),
         (format_num(app["total_paid"]), "Paid", shell.GREEN),
         (len(app["cohorts"]), "Cohort days", shell.BLUE),
