@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Pure product-agnostic survey renderer built on the shared email shell."""
 from html import escape
+import re
 
 from scripts.common import email_shell as shell
 
@@ -47,11 +48,12 @@ def _summary(summary):
     elif kind == "grouped":
         groups = summary["groups"]
         if groups:
-            body += shell.cell(shell.table(
+            table = shell.table(
                 ["Response theme", "Count"],
                 [[group["text"], group["count"]] for group in groups],
-                aligns=["left", "right"], widths=["85%", "15%"],
-            ))
+                aligns=["left", "right"], widths=["", "72"],
+            ).replace(' width=""', '', 1)
+            body += shell.cell(table)
         else:
             body += shell.cell(shell.small("No meaningful responses"), "8px 40px 0 40px")
     return body
@@ -63,7 +65,27 @@ def _response_table(section):
     for response in section["rows"]:
         status = [response.get("status_label") or "Free"] if section["has_status"] else []
         rows.append(status + [cell["value"] for cell in response["cells"]])
-    return shell.table(headers, rows)
+    if len(headers) < 4:
+        return shell.table(headers, rows)
+
+    records = []
+    for row in rows:
+        values = [str(value).strip() for value in row if value is not None]
+        values = [value for value in values if value and value != "—"]
+        record = '<strong>' + escape(values[0]) + '</strong>' if values else ''
+        if len(values) > 1:
+            record += (
+                '<br /><span style="font-size:13px; line-height:1.5; color:#666666;" '
+                'class="text-muted">' + escape(' · '.join(values[1:])) + '</span>'
+            )
+        records.append(record)
+
+    # The shell accepts text-only cells. Fill only its generated empty cells
+    # with trusted markup whose external field values are already escaped.
+    table = shell.table([headers[0]], [[""] for _ in records])
+    record_html = iter(records)
+    return re.sub(r'(<td\b[^>]*>)(</td>)',
+                  lambda match: match[1] + next(record_html) + match[2], table)
 
 
 def render(model):

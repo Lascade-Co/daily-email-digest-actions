@@ -7,7 +7,7 @@ from test_strict_render import render_tree
 class StatLabelTests(unittest.TestCase):
     def test_rendered_stat_labels_are_at_most_14_characters(self):
         for digest in ("conversion", "revenue", "reviews"):
-            columns = render_tree(digest).find("div", "stat-col")
+            columns = render_tree(digest).find("td", "stat-cell")
             self.assertTrue(columns)
             for column in columns:
                 labels = column.find("p", "stat-label-dm")
@@ -18,7 +18,7 @@ class StatLabelTests(unittest.TestCase):
                     self.assertFalse(label.children)
                     self.assertIn("font-size:11px;", label.attrs["style"])
                     self.assertIn("text-transform:uppercase;", label.attrs["style"])
-                    self.assertIn("max-width:130px;", column.attrs["style"])
+                    self.assertIn(column.attrs["width"], ("50%", "33.33%"))
 
 
 if __name__ == "__main__":

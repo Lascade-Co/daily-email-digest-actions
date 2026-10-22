@@ -5,6 +5,14 @@ from html import escape
 from scripts.common import email_shell as shell
 
 
+_LANGUAGE_NAMES = {
+    "es": "Spanish", "pt": "Portuguese", "fr": "French", "de": "German",
+    "it": "Italian", "id": "Indonesian", "hi": "Hindi", "ru": "Russian",
+    "tr": "Turkish", "ar": "Arabic", "ja": "Japanese", "ko": "Korean",
+    "zh-cn": "Chinese", "zh-tw": "Chinese", "vi": "Vietnamese",
+}
+
+
 def _rating_color(rating):
     if rating >= 4:
         return shell.GREEN
@@ -14,7 +22,7 @@ def _rating_color(rating):
 
 
 def _review_card(review):
-    """Use the style guide's Text Card with its caption and muted badge."""
+    """Use a Text Card with original captions and semantic translation badges."""
     rating = max(0, min(5, int(review.get("rating", 0))))
     title = f'{"★" * rating}{"☆" * (5 - rating)} · {rating}/5'
     if review.get("title"):
@@ -25,7 +33,18 @@ def _review_card(review):
         store_meta = [review.get("device", ""), review.get("os_version", "")]
     meta = store_meta + [review.get("author", ""), review.get("version", "")]
     metadata = shell.small(" · ".join(str(value) for value in meta if value))
-    if review.get("is_non_english"):
+    translated = review.get("translated_body")
+    original_caption = ""
+    if translated:
+        language = review.get("language", "").lower()
+        language_name = _LANGUAGE_NAMES.get(language, language.upper())
+        metadata = metadata.removesuffix("</p>") + " &nbsp; " + shell.badge(
+            f"Translated · {language_name}", "info"
+        ) + "</p>"
+        original_caption = shell.small(str(review.get("body", ""))).replace(
+            "Margin:0;", "Margin:0 0 12px 0;", 1
+        )
+    elif review.get("is_non_english"):
         metadata = metadata.removesuffix("</p>") + " &nbsp; " + shell.badge("Non-English", "muted") + "</p>"
     return shell.cell(
         '<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" '
@@ -37,8 +56,8 @@ def _review_card(review):
         'line-height:1.4; color:#222222;">' + escape(title) + '</h4>'
         '<p style="margin:0; Margin:0 0 12px 0; '
         f'font-family:{shell.FONT_BODY}; font-size:15px; line-height:1.6; '
-        'color:#222222;" class="text-main">' + escape(str(review.get("body", ""))) + '</p>'
-        + metadata + '</td></tr></table>',
+        'color:#222222;" class="text-main">' + escape(str(translated or review.get("body", ""))) + '</p>'
+        + original_caption + metadata + '</td></tr></table>',
     )
 
 

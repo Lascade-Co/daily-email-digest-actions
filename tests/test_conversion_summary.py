@@ -71,7 +71,7 @@ class ConversionSummaryTests(unittest.TestCase):
                 self.assertEqual([label.text for label in chart[0].find("td", "bar-label-dm")],
                                  ["Oct 19", "Oct 20"])
             else:
-                self.assertFalse(following.find("div", "stat-col"))
+                self.assertFalse(following.find("td", "stat-cell"))
                 self.assertFalse(following.find("table", "bar-chart-dm"))
         self.assertEqual(len(tree.find("table", "bar-chart-dm")), 2)
         self.assertFalse(tree.find("img"))

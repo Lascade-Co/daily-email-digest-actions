@@ -1,5 +1,5 @@
 # COPY of product-intelligence/Style Template/email_shell.py — edit the canonical file, then re-copy.
-# sha256(canonical) = d32fe9c9d22b
+# sha256(canonical) = 1269e144dba5
 """Canonical, dependency-free digest email shell (Python 3.9+).
 
 Source: ``Style Template/styleguide-email.html``. The complete head and client
@@ -146,6 +146,8 @@ _HEAD = """<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http:
             .avatar-subtitle { font-size: 11px !important; }
             .stat-col { max-width: 50% !important; width: 50% !important; }
             .stat-value { font-size: 28px !important; }
+            .stat-value-3 { font-size: 22px !important; }
+            .stat-card-3 { padding-left: 6px !important; padding-right: 6px !important; }
             .bar-label-cell { width: 100px !important; font-size: 11px !important; }
             .contributor-col { display: block !important; width: 100% !important; max-width: 100% !important; }
         }
@@ -413,7 +415,7 @@ def table(
             + ' style="padding:10px 12px; '
             f"font-family:{FONT_HEADING}; font-weight:600; font-size:13px; "
             'text-transform:uppercase; letter-spacing:0.03em; border-bottom:2px solid #222222; '
-            'color:#222222;" class="heading-dm header-border">' + _text(heading) + '</th>'
+            'white-space:nowrap; color:#222222;" class="heading-dm header-border">' + _text(heading) + '</th>'
         )
     parts.append('</tr>\n')
     for row_index, row in enumerate(rows):
@@ -435,46 +437,64 @@ def table(
     return ''.join(parts)
 
 
+def _stat_rows(count: int) -> List[int]:
+    """Row sizes: up to three cards share one row; four become two rows of two."""
+    if count <= 3:
+        return [count]
+    if count == 4:
+        return [2, 2]
+    sizes = [3] * (count // 3)
+    if count % 3:
+        sizes.append(count % 3)
+    return sizes
+
+
 def stat_grid(stats: Iterable[Tuple[object, str, str]]) -> str:
-    """Return inner markup with at most four template stat columns per row."""
+    """Return template stat cards laid out as plain table rows.
+
+    Every client renders a table cell the same way, so rows never collapse
+    into one card per line. Up to three cards stay on one row (a smaller
+    value size on phones keeps them there); four render as two rows of two.
+    Card markup, colours and type sizes are the template's stat card.
+    """
     values = list(stats)
     if not values:
         return ''
     parts: List[str] = []
-    for start in range(0, len(values), 4):
-        row = values[start:start + 4]
+    position = 0
+    for size in _stat_rows(len(values)):
+        row = values[position:position + size]
+        position += size
+        three = size == 3
+        value_hook = 'stat-value heading-dm' + (' stat-value-3' if three else '')
+        card_hook = 'stat-card-dm' + (' stat-card-3' if three else '')
+        cell_width = f'{100 / size:.4g}%'
         parts.append(
-            '<div style="font-size:0; text-align:center;">\n'
-            '<!--[if mso]>\n'
-            '<table role="presentation" cellspacing="0" cellpadding="0" border="0" '
-            f'width="{130 * len(row)}" align="center">\n<tr>\n<![endif]-->\n'
+            '<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" '
+            f'align="center" style="width:100%; max-width:{168 * size}px; margin:0 auto; '
+            'table-layout:fixed;" class="stat-row"><tr>'
         )
         for value, label, color in row:
             parts.append(
-                '<!--[if mso]>\n<td valign="top" width="130" align="center">\n<![endif]-->\n'
-                '<div style="display:inline-block; width:25%; max-width:130px; vertical-align:top; '
-                'text-align:center;" class="stat-col">'
-                '<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">'
-                '<tr><td align="center" style="padding:4px;">'
+                f'<td width="{cell_width}" valign="top" align="center" style="padding:4px;" class="stat-cell">'
                 '<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">'
                 '<tr><td bgcolor="#fefefe" style="background-color:#fefefe; padding:16px 12px; '
-                'text-align:center;" class="stat-card-dm">'
+                f'text-align:center;" class="{card_hook}">'
                 '<p style="margin:0; Margin:0; '
                 f"font-family:{FONT_HEADING}; font-size:32px; font-weight:700; line-height:1.1; "
-                'color:' + _text(color) + ';" class="stat-value heading-dm">' + _text(value) + '</p>'
+                'white-space:nowrap; color:' + _text(color) + f';" class="{value_hook}">' + _text(value) + '</p>'
                 '<p style="margin:4px 0 0 0; Margin:4px 0 0 0; '
                 f"font-family:{FONT_HEADING}; font-size:11px; font-weight:600; "
                 'text-transform:uppercase; letter-spacing:0.04em; color:#777777;" '
                 'class="stat-label-dm">' + _text(label) + '</p>'
-                '</td></tr></table></td></tr></table></div>\n'
-                '<!--[if mso]>\n</td>\n<![endif]-->\n'
+                '</td></tr></table></td>'
             )
-        parts.append('<!--[if mso]>\n</tr>\n</table>\n<![endif]-->\n</div>\n')
+        parts.append('</tr></table>\n')
     return ''.join(parts)
 
 
 def badge(text: str, variant: str = "default") -> str:
-    """Return a default, outline, or muted template badge."""
+    """Return a template badge: grey (default, outline, muted) or semantic colour."""
     variants = {
         "default": ('padding:5px 10px; border-radius:12px; background-color:#e8e6e3; color:#222222; '
                     'text-transform:uppercase; letter-spacing:0.03em;', 'badge-bg'),
@@ -482,9 +502,18 @@ def badge(text: str, variant: str = "default") -> str:
                     'text-transform:uppercase; letter-spacing:0.03em; border:1px solid #888888;', 'badge-outline'),
         "muted": ('padding:5px 10px; border-radius:12px; background-color:#dddad7; color:#555555; '
                   'text-transform:uppercase; letter-spacing:0.03em;', 'badge-bg text-muted'),
+        # Semantic colours come from the template's callout variants.
+        "critical": ('padding:5px 10px; border-radius:12px; background-color:#fdf0ee; color:#c0392b; '
+                     'text-transform:uppercase; letter-spacing:0.03em;', 'callout-critical-dm'),
+        "warning": ('padding:5px 10px; border-radius:12px; background-color:#faf3e6; color:#8a6520; '
+                    'text-transform:uppercase; letter-spacing:0.03em;', 'callout-warning-bg'),
+        "positive": ('padding:5px 10px; border-radius:12px; background-color:#f0f8f2; color:#2a8c4a; '
+                     'text-transform:uppercase; letter-spacing:0.03em;', 'callout-positive-dm'),
+        "info": ('padding:5px 10px; border-radius:12px; background-color:#eef5fb; color:#2980b9; '
+                 'text-transform:uppercase; letter-spacing:0.03em;', 'callout-info-bg'),
     }
     if variant not in variants:
-        raise ValueError("badge variant must be default, outline, or muted")
+        raise ValueError("badge variant must be default, outline, muted, critical, warning, positive, or info")
     style, hook = variants[variant]
     return (
         '<span style="display:inline-block; '

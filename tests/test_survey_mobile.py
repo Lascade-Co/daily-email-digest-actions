@@ -1,0 +1,105 @@
+"""Keep survey fields and response counts readable in narrow email clients."""
+import unittest
+
+from scripts.survey import survey_render
+from test_strict_render import Document
+
+
+def response_section(columns, rows, has_status=False):
+    return {
+        "columns": columns,
+        "has_status": has_status,
+        "rows": [
+            {"status_label": "Pro", "cells": [{"value": value} for value in row]}
+            for row in rows
+        ],
+    }
+
+
+class SurveyMobileTests(unittest.TestCase):
+    def test_four_or_more_columns_render_one_record_per_row(self):
+        columns = ["Submission", "IMO", "Type", "Country", "Details"]
+        values = ["Britannic <ship> & fleet", "1234567", "Passenger ship",
+                  "United Kingdom", "Add <route> details & ports"]
+        for count in (4, 5):
+            with self.subTest(columns=count):
+                html = survey_render._response_table(response_section(
+                    columns[:count], [values[:count]],
+                ))
+                table = Document(html).root.find("table")[0]
+                self.assertEqual([header.text for header in table.find("th")], ["Submission"])
+                cells = table.find("td")
+                self.assertEqual(len(cells), 1)
+                self.assertEqual(cells[0].find("strong")[0].text, "Britannic <ship> & fleet")
+                self.assertEqual(len(cells[0].find("br")), 1)
+                caption = cells[0].find("span", "text-muted")[0]
+                expected_caption = "1234567 · Passenger ship · United Kingdom"
+                if count == 5:
+                    expected_caption += " · Add <route> details & ports"
+                self.assertEqual(caption.text, expected_caption)
+                self.assertIn("font-size:13px;", caption.attrs["style"])
+                self.assertIn("color:#666666;", caption.attrs["style"])
+                self.assertNotIn("<ship>", html)
+                self.assertNotIn("<route>", html)
+
+    def test_record_fields_skip_blank_values_and_keep_response_order(self):
+        html = survey_render._response_table(response_section(
+            ["Vessel", "IMO", "Type", "Country", "Details"],
+            [
+                ["", " — ", "Frigate", "Britain", ""],
+                ["Calypso", "", "—", None, ""],
+                ["", "—", "", "", ""],
+                ["Zero", 0, "", "", ""],
+            ],
+        ))
+        cells = Document(html).root.find("table")[0].find("td")
+        self.assertEqual(len(cells), 4)
+        self.assertEqual(cells[0].find("strong")[0].text, "Frigate")
+        self.assertEqual(cells[0].find("span", "text-muted")[0].text, "Britain")
+        self.assertEqual(cells[1].find("strong")[0].text, "Calypso")
+        self.assertFalse(cells[1].find("span"))
+        self.assertFalse(cells[1].find("br"))
+        self.assertEqual(cells[2].text, "")
+        self.assertFalse(cells[2].children)
+        self.assertEqual(cells[3].find("strong")[0].text, "Zero")
+        self.assertEqual(cells[3].find("span", "text-muted")[0].text, "0")
+        self.assertNotIn("—", html)
+
+    def test_status_counts_toward_four_column_threshold_and_keeps_its_order(self):
+        html = survey_render._response_table(response_section(
+            ["Feedback", "Score", "Frequency"],
+            [["More routes", "4/5", "Daily"]],
+            has_status=True,
+        ))
+        table = Document(html).root.find("table")[0]
+        self.assertEqual([header.text for header in table.find("th")], ["Status"])
+        self.assertEqual(table.find("strong")[0].text, "Pro")
+        self.assertEqual(table.find("span", "text-muted")[0].text, "More routes · 4/5 · Daily")
+
+    def test_three_columns_keep_the_existing_table_layout(self):
+        html = survey_render._response_table(response_section(
+            ["Feedback", "Score"], [["More <routes> & ports", "4/5"]],
+            has_status=True,
+        ))
+        table = Document(html).root.find("table")[0]
+        self.assertEqual([header.text for header in table.find("th")], ["Status", "Feedback", "Score"])
+        self.assertEqual([cell.text for cell in table.find("td")], ["Pro", "More <routes> & ports", "4/5"])
+        self.assertFalse(table.find("strong"))
+        self.assertNotIn("<routes>", html)
+
+    def test_grouped_theme_count_has_fixed_width_with_flexible_theme_column(self):
+        html = survey_render._summary({
+            "header": "Requests", "type": "grouped",
+            "groups": [{"text": "Missing ship requests", "count": 12}],
+        })
+        headers = Document(html).root.find("th")
+        self.assertEqual([header.text for header in headers], ["Response theme", "Count"])
+        self.assertEqual(headers[1].attrs.get("width"), "72")
+        self.assertEqual(headers[1].attrs["align"], "right")
+        self.assertNotIn("width", headers[0].attrs)
+        self.assertEqual([cell.text for cell in Document(html).root.find("table")[0].find("td")],
+                         ["Missing ship requests", "12"])
+
+
+if __name__ == "__main__":
+    unittest.main()

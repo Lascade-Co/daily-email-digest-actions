@@ -64,7 +64,7 @@ class StrictRenderTests(unittest.TestCase):
                     "padding:24px 40px 0 40px;",
                 ])
 
-    def test_body_sections_use_template_spacing_and_four_column_stat_cells(self):
+    def test_body_sections_use_template_spacing_and_mobile_stat_rows(self):
         for digest in ("revenue", "reviews", "conversion"):
             with self.subTest(digest=digest):
                 tree = render_tree(digest)
@@ -74,25 +74,25 @@ class StrictRenderTests(unittest.TestCase):
                         continue
                     expected_top = "32px" if any(c.tag == "h2" for c in cell.children) else "16px"
                     self.assertTrue(cell.attrs["style"].startswith(f"padding:{expected_top} 40px 0 40px;"), cell.attrs)
-                columns = tree.find("div", "stat-col")
-                self.assertTrue(columns)
-                for column in columns:
-                    parent = column.parent
+                grids = [cell for cell in body_cells if cell.find("table", "stat-row")]
+                self.assertTrue(grids)
+                for parent in grids:
                     self.assertEqual(parent.tag, "td")
                     self.assertEqual(parent.attrs["style"], "padding:16px 40px 0 40px; font-size:0; text-align:center;")
                     is_summary = digest == "conversion" and parent is body_cells[0]
-                    expected_columns = 3 if is_summary else 4
-                    self.assertEqual(len(parent.find("div", "stat-col")), expected_columns)
+                    rows = parent.find("table", "stat-row")
+                    expected_rows = [3] if is_summary else [2, 2]
+                    self.assertEqual([len(row.find("td", "stat-cell")) for row in rows], expected_rows)
                     if is_summary:
-                        self.assertEqual(parent.children, parent.find("div", "stat-col"))
+                        self.assertEqual(parent.children, rows)
                     else:
                         intro = parent.children[0]
                         self.assertEqual(intro.tag, "p")
                         self.assertIn("Margin:0 0 20px 0;", intro.attrs["style"])
                         self.assertIn("text-align:left;", intro.attrs["style"])
-                    ghost = "".join(parent.comments)
-                    self.assertIn(f'width="{130 * expected_columns}" align="center"', ghost)
-                    self.assertEqual(ghost.count('<td valign="top" width="130" align="center">'), expected_columns)
+                    for row in rows:
+                        self.assertEqual(row.attrs["width"], "100%")
+                        self.assertIn("table-layout:fixed;", row.attrs["style"])
 
     def test_footers_include_description_links_and_metadata_in_template_sizes(self):
         for digest in ("revenue", "reviews", "conversion"):

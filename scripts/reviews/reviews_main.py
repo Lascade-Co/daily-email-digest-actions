@@ -37,7 +37,8 @@ def main(argv=None):
     issuer_id = os.environ.get("ASC_ISSUER_ID", "")
     private_key = os.environ.get("ASC_PRIVATE_KEY", "")
     google_sa = os.environ.get("GOOGLE_SA_KEY", "")
-    for secret in (key_id, issuer_id, private_key, google_sa):
+    gemini_key = os.environ.get("GOOGLE_API_KEY", "")
+    for secret in (key_id, issuer_id, private_key, google_sa, gemini_key):
         if secret:
             mask(secret)
     sa_info = None
@@ -57,7 +58,7 @@ def main(argv=None):
         if sa_info and app.get("play_package"):
             playstore = fetch_playstore_reviews(app["play_package"], start, sa_info, until_dt=end)
         app_reviews[app["name"]] = {"appstore": appstore, "playstore": playstore}
-    model = build_model(apps, app_reviews, start, end, display_tz=tz)
+    model = build_model(apps, app_reviews, start, end, display_tz=tz, gemini_key=gemini_key or None)
     print(f"records: reviews={model['grand_total']} fetched={model['total_fetched']}")
     tail, html = render(model)
     title = subject(config["digests"]["reviews"]["name"], report_date, tail)

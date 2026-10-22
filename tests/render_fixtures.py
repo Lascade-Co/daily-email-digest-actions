@@ -1,6 +1,7 @@
 """Offline, synthetic renderer fixtures and a local HTML preview writer.
 
 Run from the repository root: python3 tests/render_fixtures.py <output-directory>
+Mobile acceptance fixtures: python3 tests/render_fixtures.py --mobile <output-directory>
 """
 from copy import deepcopy
 from importlib import import_module
@@ -143,6 +144,49 @@ def render_fixture(digest, model):
     return renderer.render(model)
 
 
+def mobile_fixture_models():
+    """Include translated Spanish feedback and a five-column ship submission."""
+    models = fixture_models()
+    reviews = models["reviews"]
+    reviews["app_names"][0] = "GeoAnimator"
+    reviews["apps"][0]["name"] = "GeoAnimator"
+    review = reviews["apps"][0]["playstore_reviews"][0]
+    review.update(
+        title="",
+        body="El mapa necesita más etiquetas de puertos y rutas guardadas.",
+        language="es",
+        translated_body="The map needs more harbor labels and saved routes.",
+    )
+    survey = models["survey_marine"]
+    survey["total"] += 2
+    survey["survey_count"] += 1
+    survey["sections"].append({
+        "label": "Missing Ships", "subtitle": "Submissions", "count": 2,
+        "render": "table", "has_status": False,
+        "columns": ["Vessel", "IMO", "Type", "Country", "Details"],
+        "rows": [
+            {"cells": [{"value": value} for value in [
+                "Britannic", "1234567", "Passenger vessel", "United Kingdom",
+                "Please add this vessel to the live map.",
+            ]]},
+            {"cells": [{"value": value} for value in [
+                "", "9876543", "Cargo vessel", "Spain", "—",
+            ]]},
+        ],
+    })
+    return {name: models[name] for name in ("reviews", "survey_marine", "conversion")}
+
+
+def write_mobile_previews(output_directory):
+    output_directory = Path(output_directory)
+    output_directory.mkdir(parents=True, exist_ok=True)
+    for digest, model in mobile_fixture_models().items():
+        _, html = render_fixture(digest, model)
+        name = "survey" if digest == "survey_marine" else digest
+        (output_directory / f"b-{name}.html").write_text(html, encoding="utf-8")
+    print("Rendered 3 synthetic mobile fixture previews")
+
+
 def write_previews(output_directory):
     output_directory = Path(output_directory)
     output_directory.mkdir(parents=True, exist_ok=True)
@@ -153,6 +197,9 @@ def write_previews(output_directory):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        raise SystemExit("Usage: python3 tests/render_fixtures.py <output-directory>")
-    write_previews(sys.argv[1])
+    if len(sys.argv) == 3 and sys.argv[1] == "--mobile":
+        write_mobile_previews(sys.argv[2])
+    elif len(sys.argv) == 2:
+        write_previews(sys.argv[1])
+    else:
+        raise SystemExit("Usage: python3 tests/render_fixtures.py [--mobile] <output-directory>")
