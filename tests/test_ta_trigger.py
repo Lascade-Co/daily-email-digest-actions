@@ -124,6 +124,7 @@ class SettingsTests(unittest.TestCase):
             {"MODE": "recovery", "GITHUB_REF": "refs/heads/feature"},    # production off main
             {"MODE": "recovery", "GITHUB_REF": "refs/heads/main", "GITHUB_RUN_ATTEMPT": "2"},
             {"MODE": "send"},
+            {"MODE": "test", "TEST_TO": "a@example.com,\nb@example.com"},
         ]
         for extra in bad:
             with self.subTest(extra=extra), self.assertRaises(T.TriggerError):
@@ -275,6 +276,15 @@ class WorkflowTests(unittest.TestCase):
             self.assertEqual(first["name"], "Mask test recipient")
             self.assertNotIn("env", first)
             self.assertIn("GITHUB_EVENT_PATH", first["run"])
+            import os, subprocess, tempfile
+            with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as event:
+                json.dump({"inputs": {"to": "a@example.com,\nb@example.com; c%d@example.com"}}, event)
+            out = subprocess.run(["bash", "-c", first["run"]], capture_output=True, text=True,
+                                 env={**os.environ, "GITHUB_EVENT_PATH": event.name}).stdout.splitlines()
+            os.unlink(event.name)
+            self.assertTrue(all(line.startswith("::add-mask::") for line in out), out)
+            self.assertTrue({"::add-mask::a@example.com", "::add-mask::b@example.com",
+                             "::add-mask::c%25d@example.com"} <= set(out), out)
 
     def test_gates_target_0505_and_dedupe_on_the_production_prefix(self):
         for job in ("gate", "gate2"):

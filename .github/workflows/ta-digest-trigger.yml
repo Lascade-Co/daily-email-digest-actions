@@ -49,8 +49,14 @@ jobs:
       # Reads the event file, so the address is masked before any step prints it in its env block.
       - name: Mask test recipient
         run: |
-          python3 -c 'import json, os; to = (json.load(open(os.environ["GITHUB_EVENT_PATH"])).get("inputs") or {}).get("to") or ""; to.strip() and print("::add-mask::" + to.strip())'
-          python3 -c 'import json, os; to = (json.load(open(os.environ["GITHUB_EVENT_PATH"])).get("inputs") or {}).get("to") or ""; to and print("::add-mask::" + to)'
+          python3 - <<'PY'
+          import json, os, re
+          to = (json.load(open(os.environ["GITHUB_EVENT_PATH"])).get("inputs") or {}).get("to") or ""
+          # Mask every address on its own line; workflow commands cannot carry a raw CR or LF.
+          for part in {to.strip(), *re.split(r"[\s,;]+", to)}:
+              if part and "\n" not in part and "\r" not in part:
+                  print("::add-mask::" + part.replace("%", "%25"))
+          PY
       - uses: actions/checkout@v6
         with:
           ref: ${{ github.sha }}
@@ -122,8 +128,14 @@ jobs:
       # Reads the event file, so the address is masked before any step prints it in its env block.
       - name: Mask test recipient
         run: |
-          python3 -c 'import json, os; to = (json.load(open(os.environ["GITHUB_EVENT_PATH"])).get("inputs") or {}).get("to") or ""; to.strip() and print("::add-mask::" + to.strip())'
-          python3 -c 'import json, os; to = (json.load(open(os.environ["GITHUB_EVENT_PATH"])).get("inputs") or {}).get("to") or ""; to and print("::add-mask::" + to)'
+          python3 - <<'PY'
+          import json, os, re
+          to = (json.load(open(os.environ["GITHUB_EVENT_PATH"])).get("inputs") or {}).get("to") or ""
+          # Mask every address on its own line; workflow commands cannot carry a raw CR or LF.
+          for part in {to.strip(), *re.split(r"[\s,;]+", to)}:
+              if part and "\n" not in part and "\r" not in part:
+                  print("::add-mask::" + part.replace("%", "%25"))
+          PY
       - uses: actions/checkout@v6
         with:
           ref: ${{ github.sha }}

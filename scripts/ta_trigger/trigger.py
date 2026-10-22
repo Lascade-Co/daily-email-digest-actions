@@ -64,6 +64,8 @@ def settings(env, now):
         choice = env.get("INPUT_EDITION") or "both"
         if mode not in ("dry", "test", "recovery") or choice not in ("pt", "ist", "both"):
             raise TriggerError("invalid mode or edition")
+        if any(ch in env.get("TEST_TO", "") for ch in "\r\n"):
+            raise TriggerError("to must be one line")
         if (mode == "test") != bool(env.get("TEST_TO", "").strip()):
             raise TriggerError("mode=test requires to; other modes must leave to empty")
         if mode == "recovery" and env.get("GITHUB_REF") != "refs/heads/main":
