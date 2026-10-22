@@ -1,5 +1,5 @@
 # COPY of product-intelligence/Style Template/email_shell.py — edit the canonical file, then re-copy.
-# sha256(canonical) = c1f320d76cf5
+# sha256(canonical) = d32fe9c9d22b
 """Canonical, dependency-free digest email shell (Python 3.9+).
 
 Source: ``Style Template/styleguide-email.html``. The complete head and client
@@ -452,7 +452,7 @@ def stat_grid(stats: Iterable[Tuple[object, str, str]]) -> str:
         for value, label, color in row:
             parts.append(
                 '<!--[if mso]>\n<td valign="top" width="130" align="center">\n<![endif]-->\n'
-                '<div style="display:inline-block; width:100%; max-width:130px; vertical-align:top; '
+                '<div style="display:inline-block; width:25%; max-width:130px; vertical-align:top; '
                 'text-align:center;" class="stat-col">'
                 '<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">'
                 '<tr><td align="center" style="padding:4px;">'
