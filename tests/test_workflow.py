@@ -111,6 +111,72 @@ class WorkflowTests(unittest.TestCase):
                 value = self.w.settings(self.env(GITHUB_REF=branch, RECOVERY="true", **overrides), self.now)
                 self.assertEqual(value["mode"], mode)
 
+    def test_production_recovery_before_cutoff_rejects_today_and_tomorrow(self):
+        for edition, instant in (("pt", "2026-10-21T11:59:59+00:00"),
+                                 ("ist", "2026-10-20T23:29:59+00:00")):
+            now = dt.datetime.fromisoformat(instant)
+            for key, overrides in (("INPUT_DATE", {}), ("REPORT_DATE", {"DIGEST": "revenue"})):
+                env = self.env(INPUT_EDITION=edition, DRY_RUN="false", RECOVERY="true", **overrides)
+                with self.subTest(edition=edition, key=key, date="2026-10-20"):
+                    value = self.w.settings({**env, key: "2026-10-20"}, now)
+                    self.assertEqual(value["report_date"], "2026-10-20")
+                for date in ("2026-10-21", "2026-10-22"):
+                    with self.subTest(edition=edition, key=key, date=date), self.assertRaisesRegex(
+                            self.w.SettingsError, "^production recovery cannot target a future report day$"):
+                        self.w.settings({**env, key: date}, now)
+
+    def test_production_recovery_from_cutoff_allows_today_but_rejects_tomorrow(self):
+        for edition, instant in (("pt", "2026-10-21T12:00:00+00:00"),
+                                 ("ist", "2026-10-20T23:30:00+00:00")):
+            cutoff = dt.datetime.fromisoformat(instant)
+            for now in (cutoff, cutoff + dt.timedelta(hours=1)):
+                for key, overrides in (("INPUT_DATE", {}), ("REPORT_DATE", {"DIGEST": "revenue"})):
+                    env = self.env(INPUT_EDITION=edition, DRY_RUN="false", RECOVERY="true", **overrides)
+                    with self.subTest(edition=edition, now=now, key=key):
+                        value = self.w.settings({**env, key: "2026-10-21"}, now)
+                        self.assertEqual(value["report_date"], "2026-10-21")
+                        with self.assertRaisesRegex(self.w.SettingsError,
+                                "^production recovery cannot target a future report day$"):
+                            self.w.settings({**env, key: "2026-10-22"}, now)
+
+    def test_production_recovery_both_checks_each_edition_cutoff(self):
+        env = self.env(INPUT_EDITION="both", DRY_RUN="false", RECOVERY="true")
+        resolved = self.w.settings(env, self.now)
+        self.assertEqual(json.loads(resolved["editions"]), [
+            {"edition": "pt", "report_date": "2026-10-20"},
+            {"edition": "ist", "report_date": "2026-10-21"},
+        ])
+        shared = self.w.settings({**env, "INPUT_DATE": "2026-10-20"}, self.now)
+        self.assertEqual(json.loads(shared["editions"]), [
+            {"edition": "pt", "report_date": "2026-10-20"},
+            {"edition": "ist", "report_date": "2026-10-20"},
+        ])
+        ist = self.w.settings({**env, "INPUT_EDITION": "ist", "INPUT_DATE": "2026-10-21"}, self.now)
+        self.assertEqual(ist["report_date"], "2026-10-21")
+        with self.assertRaisesRegex(self.w.SettingsError,
+                "^production recovery cannot target a future report day$"):
+            self.w.settings({**env, "INPUT_DATE": "2026-10-21"}, self.now)
+
+    def test_future_report_days_remain_allowed_for_branch_previews_and_test_sends(self):
+        for mode in ({"DRY_RUN": "true"}, {"DRY_RUN": "false", "TEST_MODE": "true"}):
+            for edition, overrides in (("both", {"INPUT_DATE": "2026-10-22"}),
+                                       ("pt", {"DIGEST": "revenue", "REPORT_DATE": "2026-10-22"}),
+                                       ("ist", {"DIGEST": "revenue", "REPORT_DATE": "2026-10-22"})):
+                with self.subTest(mode=mode, edition=edition):
+                    value = self.w.settings(self.env(INPUT_EDITION=edition,
+                        GITHUB_REF="refs/heads/codex/digest-emails/b", **mode, **overrides), self.now)
+                    self.assertEqual(value["report_date"], "2026-10-22")
+
+    def test_future_recovery_cli_reports_exact_error_without_outputs(self):
+        env = self.env(DRY_RUN="false", RECOVERY="true", INPUT_DATE="2026-10-22",
+                       NOW="2026-10-21T02:00:00Z")
+        output, errors = io.StringIO(), io.StringIO()
+        with patch.dict(os.environ, env, clear=True), contextlib.redirect_stdout(output), \
+                contextlib.redirect_stderr(errors):
+            self.assertEqual(self.w.main(["settings"]), 2)
+        self.assertEqual(output.getvalue(), "")
+        self.assertEqual(errors.getvalue().strip(), "production recovery cannot target a future report day")
+
     def test_production_requires_a_fresh_run_attempt(self):
         for attempt in ("2", "99", "", "01"):
             with self.subTest(attempt=attempt), self.assertRaisesRegex(

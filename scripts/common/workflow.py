@@ -127,13 +127,18 @@ def settings(env=None, now=None):
     matrix = []
     for local_edition in editions:
         local_zone = config["editions"][local_edition]["tz"]
+        local = now.astimezone(ZoneInfo(local_zone))
+        latest_report_date = local.date() - dt.timedelta(days=local.time() < dt.time(5))
         if supplied_date:
             report_date = supplied_date
         elif event == "schedule":
             report_date = G.plan(now, tz=local_zone, target=(5, 5))[0]
         else:
-            local = now.astimezone(ZoneInfo(local_zone))
-            report_date = local.date() - dt.timedelta(days=local.time() < dt.time(5))
+            report_date = latest_report_date
+        # A future report day can put an earlier recovery outside the history
+        # scan's date window. Only completed cutoffs are safe for recovery.
+        if mode == "real" and event == "workflow_dispatch" and report_date > latest_report_date:
+            raise SettingsError("production recovery cannot target a future report day")
         matrix.append({"edition": local_edition, "report_date": report_date.isoformat()})
     date = matrix[0]["report_date"] if len(matrix) == 1 else supplied
     prefix = {"dry": "Dry run", "test": "Test send", "real": "Deliver"}[mode]
