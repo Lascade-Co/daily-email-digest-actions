@@ -110,32 +110,28 @@ def fixture_models():
     }
     survey_measure = deepcopy(survey)
     survey_measure.update(product_name="Smart Ruler", email_title="Smart Ruler Surveys")
-    conversion = {
-        "date_str": "Wednesday, 21 October 2026",
-        "app_names": ["MarineRadar", "Smart Ruler", "GeoAnimator"],
-        "apps": [
-            {
-                "name": "MarineRadar", "overall_rate": 3.2,
-                "total_paid": 32, "total_installs": 1000, "has_data": True,
+    from scripts.conversion.conversion_model import build_model as build_conversion
+    conversion = build_conversion(
+        [{"name": "MarineRadar"}, {"name": "Smart Ruler"}, {"name": "GeoAnimator"}],
+        {
+            "MarineRadar": {
+                "overall_rate": 3.2, "total_paid": 32, "total_installs": 1000,
                 "cohorts": [
                     {"date": "2026-10-20", "installs": 500, "paid": 15, "rate": 3.0},
                     {"date": "2026-10-19", "installs": 500, "paid": 17, "rate": 3.4},
                 ],
             },
-            {
-                "name": "Smart Ruler", "overall_rate": 5.5,
-                "total_paid": 55, "total_installs": 1000, "has_data": True,
+            "Smart Ruler": {
+                "overall_rate": 5.5, "total_paid": 55, "total_installs": 1000,
                 "cohorts": [
                     {"date": "2026-10-20", "installs": 500, "paid": 25, "rate": 5.0},
                     {"date": "2026-10-19", "installs": 500, "paid": 30, "rate": 6.0},
                 ],
             },
-            {
-                "name": "GeoAnimator", "overall_rate": 0.0,
-                "total_paid": 0, "total_installs": 0, "has_data": False, "cohorts": [],
-            },
-        ],
-    }
+        },
+        datetime(2026, 10, 21, 12, tzinfo=timezone.utc),
+        date_from="2026-10-07", date_to="2026-10-20",
+    )
     return {"revenue": revenue, "reviews": reviews, "survey_marine": survey,
             "survey_measure": survey_measure, "conversion": conversion}
 

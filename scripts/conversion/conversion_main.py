@@ -48,7 +48,7 @@ def main(argv=None):
         mask(api_key)
         app_data[app["name"]] = fetch_install_to_paid(api_key, date_from, date_to, tz=str(tz))
     print(f"records: apps={len(app_data)} cohorts={sum(len(data['cohorts']) for data in app_data.values())}")
-    model = build_model(apps, app_data, end, display_tz=tz)
+    model = build_model(apps, app_data, end, display_tz=tz, date_from=date_from, date_to=date_to)
     tail, html = render(model)
     title = subject(config["digests"]["conversion"]["name"], report_date, tail)
     if args.dry_run:

@@ -62,10 +62,10 @@ class ConversionSummaryTests(unittest.TestCase):
             following = cells[index + 1]
             if app["has_data"]:
                 self.assertEqual([label.text for label in following.find("p", "stat-label-dm")],
-                                 ["Rate", "Installs", "Paid", "Cohort days"])
+                                 ["Rate", "Installs", "Paid to date", "Installs/day"])
                 self.assertEqual([value.text for value in following.find("p", "stat-value")],
                                  [f"{app['overall_rate']:.1f}%", "1,000",
-                                  str(app["total_paid"]), "2"])
+                                  str(app["total_paid"]), "71"])
                 chart = cells[index + 2].find("table", "bar-chart-dm")
                 self.assertEqual(len(chart), 1)
                 self.assertEqual([label.text for label in chart[0].find("td", "bar-label-dm")],

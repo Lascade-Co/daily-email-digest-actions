@@ -124,7 +124,7 @@ class ConversionBarTests(unittest.TestCase):
                 "style": "padding:16px 40px 0 40px;", "class": "body-cell",
             })
             self.assertEqual(chart.find("p", "bar-title-dm")[0].text.strip(),
-                             "Install → paid by cohort day")
+                             "Install → paid, latest cohorts (up to 7)")
             self.assertEqual(max(width_percent(fill) for fill in fill_cells(chart)), 100)
 
     def test_zero_rates_keep_percentage_values_without_division_by_zero(self):

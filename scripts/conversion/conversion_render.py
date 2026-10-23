@@ -52,20 +52,26 @@ def bar_chart(title, rows):
     return html + '</td></tr></table>'
 
 
-def _stats(app):
+def _days(n):
+    return f"{n} day{'s' if n != 1 else ''}"
+
+
+def _stats(app, window_str, window_days):
     """Compose the template's four-column stat row without an extra wrapper."""
+    per_day = (f", about {format_num(app['installs_per_day'])} a day" if window_days > 1 else "")
     intro = (
         '<p style="margin:0; Margin:0 0 20px 0; '
         f'font-family:{shell.FONT_BODY}; font-size:16px; line-height:1.6; '
         'letter-spacing:0.01em; color:#222222; text-align:left;" class="text-main">'
-        f"{format_num(app['total_paid'])} paid · {format_num(app['total_installs'])} installs"
+        f"Installs {window_str} ({_days(window_days)}): {format_num(app['total_installs'])} installs"
+        f"{per_day}. {format_num(app['total_paid'])} paid to date."
         '</p>'
     )
     grid = shell.stat_grid([
         (f"{format_pct(app['overall_rate'])}%", "Rate", _rate_color(app["overall_rate"])),
         (format_num(app["total_installs"]), "Installs", shell.INK),
-        (format_num(app["total_paid"]), "Paid", shell.GREEN),
-        (len(app["cohorts"]), "Cohort days", shell.BLUE),
+        (format_num(app["total_paid"]), "Paid to date", shell.GREEN),
+        (format_num(app["installs_per_day"]), "Installs/day", shell.BLUE),
     ])
     grid = grid.removeprefix('<div style="font-size:0; text-align:center;">\n').removesuffix('</div>\n')
     grid = grid.replace('\n<![endif]-->\n<!--[if mso]>\n', '\n')
@@ -75,12 +81,14 @@ def _stats(app):
 def render(model):
     """Return the metric tail and HTML body; the caller composes the subject."""
     m = model
+    window = f"installs {m['window_str']} ({_days(m['window_days'])}), payments to date"
     rate_parts = [f"{app['name']} {format_pct(app['overall_rate'])}%"
                   for app in m["apps"] if app["has_data"]]
     tail = ", ".join(rate_parts) if rate_parts else "No conversion data"
     preheader_parts = [
         f"{app['name']} {format_pct(app['overall_rate'])}% "
-        f"({format_num(app['total_paid'])} paid / {format_num(app['total_installs'])} installs)"
+        f"({format_num(app['total_paid'])} paid / {format_num(app['total_installs'])} installs, "
+        f"{m['window_str']})"
         for app in m["apps"] if app["has_data"]
     ]
     preheader = " · ".join(preheader_parts) if preheader_parts else "No conversion data"
@@ -98,17 +106,18 @@ def render(model):
     summary = summary.removeprefix('<div style="font-size:0; text-align:center;">\n').removesuffix('</div>\n')
     summary = summary.replace('\n<![endif]-->\n<!--[if mso]>\n', '\n')
     body += shell.cell(summary, "16px 40px 0 40px; font-size:0; text-align:center")
+    body += shell.cell(shell.small(f"Install → paid by app · {window}"))
     for app in m["apps"]:
         body += shell.cell(shell.h2(app["name"]), "32px 40px 0 40px")
         if not app["has_data"]:
             body += shell.cell(shell.callout("info", "No conversion data",
                 "No conversion data available for this reporting period."))
             continue
-        body += _stats(app)
+        body += _stats(app, m["window_str"], m["window_days"])
         cohorts = sorted(app["cohorts"], key=lambda cohort: cohort["date"])[-7:]
         if cohorts:
             maximum = max(cohort["rate"] for cohort in cohorts)
-            body += shell.cell(bar_chart("Install → paid by cohort day", [
+            body += shell.cell(bar_chart("Install → paid, latest cohorts (up to 7)", [
                 (format_cohort_date(cohort["date"]), f"{cohort['rate']:.2f}%",
                  cohort["rate"] / maximum if maximum > 0 else 0)
                 for cohort in cohorts
@@ -122,7 +131,8 @@ def render(model):
     return tail, shell.document(
         "Install → Paid", preheader, body,
         shell.footer("Install → Paid digest", [
-            "Conversion by install-date cohort; rates grow as users start a subscription.",
+            f"Totals cover installs {m['window_str']} and payments made since; "
+            "each cohort's rate grows as its users subscribe.",
             "Sent automatically by Lascade",
         ], [("Adapty dashboard", ADAPTY_DASHBOARD)]),
     )
