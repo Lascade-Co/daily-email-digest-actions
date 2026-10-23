@@ -37,14 +37,22 @@
       ]
     },
     {
-      "sheet_name": "Responses",
-      "label": "Responses",
-      "subtitle": "Individual feedback",
-      "render": "table",
+      "sheet_name": "Other Issues",
+      "label": "Other Issues",
+      "subtitle": "Free-text responses not matching predefined areas",
+      "render": "summary",
       "columns": [
-        {"col": 1, "header": "Area", "bold_all": true},
-        {"col": 2, "header": "Detail", "empty_text": "—", "empty_color": "#aaa"},
-        {"col": 3, "header": "Extra", "empty_text": "—", "empty_color": "#aaa"}
+        {"col": 1, "header": "Reported issue"}
+      ]
+    },
+    {
+      "sheet_name": "Detailed Feedbacks",
+      "label": "Detailed Feedbacks",
+      "subtitle": "Grouped by feature area",
+      "render": "summary",
+      "columns": [
+        {"col": 1, "header": "Issue"},
+        {"col": 2, "header": "Extra context"}
       ]
     },
     {
