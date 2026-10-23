@@ -62,7 +62,12 @@ def _fetch_posthog(config, start, end):
     responses = fetch_responses(
         api_key, config["posthog_project_id"], config["posthog_survey_id"], start, end)
     print(f"records: posthog_responses={len(responses)}")
-    fetched_tabs = transform_to_tabs(responses, config)
+    fetched_tabs, detail_sections = transform_to_tabs(responses, config)
+    if detail_sections:
+        surveys = config["surveys"]
+        insert_idx = next((i for i, s in enumerate(surveys) if s["sheet_name"] == "Open Feedback"), len(surveys))
+        for i, ds in enumerate(detail_sections):
+            surveys.insert(insert_idx + i, ds)
     print(f"records: rows={sum(len(rows) for rows in fetched_tabs.values())}")
     return fetched_tabs, None, gemini_key or None
 

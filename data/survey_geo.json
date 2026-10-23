@@ -10,8 +10,17 @@
   "source_label": "View all in PostHog",
   "question_map": {
     "area_index": 0,
-    "detail_indices": [1, 2, 3, 4, 5, 6],
-    "open_index": 7
+    "open_index": 7,
+    "area_detail_map": {
+      "Selecting or positioning locations": 1,
+      "Camera movement / transitions": 2,
+      "Highlighting or styling regions": 3,
+      "Adding text / labels": 4,
+      "Adding images": 4,
+      "Adding markers": 4,
+      "Timeline editing": 5,
+      "Exporting video": 6
+    }
   },
   "surveys": [
     {
@@ -43,16 +52,6 @@
       "render": "summary",
       "columns": [
         {"col": 1, "header": "Reported issue"}
-      ]
-    },
-    {
-      "sheet_name": "Detailed Feedbacks",
-      "label": "Detailed Feedbacks",
-      "subtitle": "Grouped by feature area",
-      "render": "summary",
-      "columns": [
-        {"col": 1, "header": "Issue"},
-        {"col": 2, "header": "Extra context"}
       ]
     },
     {

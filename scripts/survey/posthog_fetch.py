@@ -2,6 +2,7 @@
 """Network layer: PostHog survey responses fetcher."""
 import json
 import sys
+from collections import defaultdict
 
 import requests
 
@@ -67,6 +68,22 @@ def _parse_answer(answer):
     return str(val).strip()
 
 
+def _parse_answer_list(answer):
+    """Extract answer as a list of individual choices."""
+    val = answer.get("answer", "")
+    if not val:
+        return []
+    if answer.get("question_type") == "multiple_choice":
+        try:
+            parsed = json.loads(val)
+            if isinstance(parsed, list):
+                return [str(v).strip() for v in parsed if str(v).strip()]
+        except (json.JSONDecodeError, TypeError):
+            pass
+    text = str(val).strip()
+    return [text] if text else []
+
+
 def _is_meaningful(text):
     return text.strip().lower() not in _LOW_VALUE and len(text.strip()) > 2
 
@@ -74,20 +91,23 @@ def _is_meaningful(text):
 def transform_to_tabs(responses, config):
     """Transform PostHog responses into {tab_name: rows} for survey_model.
 
-    Produces four pseudo-tabs:
-    - Trouble Areas: predefined choice answers only → distribution
-    - Other Issues: free-text/unknown area answers → summary (grouped)
-    - Detailed Feedbacks: "Area — detail" per response → summary (grouped by area)
-    - Open Feedback: meaningful open-text answers → summary (grouped)
+    Produces pseudo-tabs based on config['surveys'] (static sections) plus
+    dynamic per-area detail tabs when area_detail_map is configured.
+
+    Returns (tabs, detail_sections) where detail_sections is a list of
+    survey config entries to inject into config['surveys'].
     """
     qmap = config.get("question_map", {})
     area_idx = qmap.get("area_index", 0)
-    detail_indices = qmap.get("detail_indices", [])
     open_idx = qmap.get("open_index")
+    area_detail_map = qmap.get("area_detail_map", {})
     known = set(KNOWN_AREAS)
 
     tab_names = {s["sheet_name"] for s in config["surveys"]}
     tabs = {name: [] for name in tab_names}
+
+    # Per-area detail collection: area -> list of individual choice strings
+    area_details = defaultdict(list)
 
     for resp in responses:
         ts = resp["submitted_at"]
@@ -107,24 +127,34 @@ def transform_to_tabs(responses, config):
         if "Other Issues" in tabs and not is_known:
             tabs["Other Issues"].append([ts, area])
 
-        # Collect follow-up detail
-        detail_parts = []
-        for di in detail_indices:
-            if di in answers:
-                detail_parts.append(_parse_answer(answers[di]))
-        detail = "; ".join(d for d in detail_parts if d)
+        # Per-area detail: find which follow-up question this area maps to
+        if area in area_detail_map:
+            detail_qi = area_detail_map[area]
+            if detail_qi in answers:
+                choices = _parse_answer_list(answers[detail_qi])
+                for choice in choices:
+                    area_details[area].append((ts, choice))
 
         open_text = _parse_answer(answers.get(open_idx, {})) if open_idx is not None else ""
-
-        # Detailed Feedbacks: "Area — detail" for meaningful responses
-        if "Detailed Feedbacks" in tabs:
-            issue = f"{area} — {detail}" if detail else area
-            extra = open_text if _is_meaningful(open_text) else ""
-            if detail or extra:
-                tabs["Detailed Feedbacks"].append([ts, issue, extra])
 
         # Open Feedback: meaningful open-text only
         if "Open Feedback" in tabs and _is_meaningful(open_text):
             tabs["Open Feedback"].append([ts, open_text])
 
-    return tabs
+    # Build per-area detail tabs and config entries
+    detail_sections = []
+    for area in KNOWN_AREAS:
+        entries = area_details.get(area, [])
+        if not entries:
+            continue
+        tab_name = f"Detail: {area}"
+        tabs[tab_name] = [[e[0], e[1]] for e in entries]
+        detail_sections.append({
+            "sheet_name": tab_name,
+            "label": area,
+            "subtitle": f"{len(entries)} response{'s' if len(entries) != 1 else ''}",
+            "render": "distribution",
+            "columns": [{"col": 1, "header": "Issue"}],
+        })
+
+    return tabs, detail_sections
