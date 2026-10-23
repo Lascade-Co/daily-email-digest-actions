@@ -489,4 +489,5 @@ def build_model(config, fetched_tabs, cutoff_dt, now_dt, translate_fn=None, disp
         "date_str": date_str,
         "cutoff_str": cutoff_str,
         "sheet_url": config.get("sheet_url", ""),
+        "source_label": config.get("source_label", "View all in Sheets"),
     }

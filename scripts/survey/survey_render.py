@@ -145,7 +145,7 @@ def render(model):
             body += ''.join(_summary(summary) for summary in section["summaries"])
         else:
             body += shell.cell(_response_table(section))
-    body += shell.cell(shell.button("View all in Sheets", m["sheet_url"]), "32px 40px 0 40px")
+    body += shell.cell(shell.button(m.get("source_label", "View all in Sheets"), m["sheet_url"]), "32px 40px 0 40px")
     body += shell.section_close() + shell.spacer()
     return tail, shell.document(
         m["email_title"], preheader, body,

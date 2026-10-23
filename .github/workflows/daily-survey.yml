@@ -119,7 +119,7 @@ jobs:
     uses: ./.github/workflows/_digest.yml
     with:
       workflow: daily-survey.yml
-      digests: '["survey_marine","survey_measure"]'
+      digests: '["survey_marine","survey_measure","survey_geo"]'
       edition: ${{ matrix.edition }}
       report_date: ${{ matrix.report_date }}
       dry_run: ${{ inputs.dry_run || false }}

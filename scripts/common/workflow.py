@@ -24,7 +24,7 @@ except ImportError:
 WORKFLOWS = {
     "daily-revenue.yml": (45, 11, ("revenue",)),
     "daily-reviews.yml": (47, 13, ("reviews",)),
-    "daily-survey.yml": (49, 15, ("survey_marine", "survey_measure")),
+    "daily-survey.yml": (49, 15, ("survey_marine", "survey_measure", "survey_geo")),
     "daily-conversion.yml": (51, 17, ("conversion",)),
 }
 

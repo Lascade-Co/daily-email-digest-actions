@@ -1,0 +1,60 @@
+{
+  "source": "posthog",
+  "posthog_project_id": 153421,
+  "posthog_survey_id": "01a0f720-96d1-0000-3f72-05e68a847972",
+  "posthog_api_key_env": "POSTHOG_GEO_API_KEY",
+  "product_name": "GeoAnimator",
+  "email_title": "GeoAnimator In-App Feedback",
+  "timezone": "Asia/Kolkata",
+  "sheet_url": "https://us.posthog.com/project/153421/surveys/01a0f720-96d1-0000-3f72-05e68a847972",
+  "source_label": "View all in PostHog",
+  "question_map": {
+    "area_index": 0,
+    "detail_indices": [1, 2, 3, 4, 5, 6],
+    "open_index": 7
+  },
+  "surveys": [
+    {
+      "sheet_name": "Trouble Areas",
+      "label": "Trouble Areas",
+      "subtitle": "What users struggle with",
+      "render": "distribution",
+      "columns": [
+        {
+          "col": 1,
+          "header": "Area",
+          "color_map": {
+            "Selecting or positioning locations": "#4a90d9",
+            "Highlighting or styling regions": "#9b59b6",
+            "Adding text / labels": "#2ecc71",
+            "Adding images": "#e67e22",
+            "Adding markers": "#1abc9c",
+            "Timeline editing": "#f1c40f",
+            "Exporting video": "#e74c3c",
+            "Camera movement / transitions": "#e84393"
+          }
+        }
+      ]
+    },
+    {
+      "sheet_name": "Responses",
+      "label": "Responses",
+      "subtitle": "Individual feedback",
+      "render": "table",
+      "columns": [
+        {"col": 1, "header": "Area", "bold_all": true},
+        {"col": 2, "header": "Detail", "empty_text": "—", "empty_color": "#aaa"},
+        {"col": 3, "header": "Extra", "empty_text": "—", "empty_color": "#aaa"}
+      ]
+    },
+    {
+      "sheet_name": "Open Feedback",
+      "label": "Open Feedback",
+      "subtitle": "Free-form comments",
+      "render": "summary",
+      "columns": [
+        {"col": 1, "header": "Feedback"}
+      ]
+    }
+  ]
+}

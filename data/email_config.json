@@ -73,6 +73,25 @@
         "data/survey_measure.json"
       ]
     },
+    "survey_geo": {
+      "sender": "GeoAnimator",
+      "recipients": {
+        "ist": [
+          "angelrose@lascade.com"
+        ],
+        "pt": [
+          "cherian@lascade.com"
+        ]
+      },
+      "name": "GeoAnimator feedback",
+      "module": "scripts.survey.survey_main",
+      "extra_args": [
+        "--digest",
+        "survey_geo",
+        "--config",
+        "data/survey_geo.json"
+      ]
+    },
     "conversion": {
       "sender": "Lascade Apps",
       "recipients": {
