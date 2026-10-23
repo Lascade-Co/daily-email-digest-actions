@@ -166,7 +166,13 @@ def send_frozen(path, api_key, max_attempts=4, session=None, sleep_fn=None):
                 retryable = False
 
         if not retryable or attempt == max_attempts:
-            raise DeliveryError(f"Resend delivery failed: HTTP {status} ({category})")
+            hint = ""
+            if response is not None and status in (400, 401, 403, 404, 422):
+                try:
+                    hint = f" — {response.json().get('message', '')}"
+                except Exception:
+                    pass
+            raise DeliveryError(f"Resend delivery failed: HTTP {status} ({category}){hint}")
 
         sleep_fn(min(1 * 2 ** (attempt - 1), 15))
 
