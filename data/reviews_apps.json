@@ -1,5 +1,6 @@
 [
   {"name": "MarineRadar", "apple_id": "6560109315", "play_package": "com.lascade.marinetracker"},
   {"name": "Smart Ruler", "apple_id": "6736476968", "play_package": "com.lascade.measure"},
-  {"name": "GeoAnimator", "apple_id": "6813352608", "play_package": "com.lascade.geoanimator"}
+  {"name": "GeoAnimator", "apple_id": "6813352608", "play_package": "com.lascade.geoanimator"},
+  {"name": "TravelAnimator", "apple_id": "6462844561", "play_package": "com.travelanimator.routemap"}
 ]

@@ -52,12 +52,18 @@ def main(argv=None):
     app_reviews = {}
     for app in apps:
         appstore, playstore = [], []
+        status = {"appstore": "failed", "playstore": "n/a"}   # missing credentials = failed
         if key_id and issuer_id and private_key:
-            appstore = fetch_appstore_reviews(app["apple_id"], start, key_id, issuer_id,
-                                             private_key, until_dt=end)
-        if sa_info and app.get("play_package"):
-            playstore = fetch_playstore_reviews(app["play_package"], start, sa_info, until_dt=end)
-        app_reviews[app["name"]] = {"appstore": appstore, "playstore": playstore}
+            appstore, status["appstore"] = fetch_appstore_reviews(
+                app["apple_id"], start, key_id, issuer_id, private_key, until_dt=end)
+        if app.get("play_package"):
+            status["playstore"] = "failed"
+            if sa_info:
+                playstore, status["playstore"] = fetch_playstore_reviews(
+                    app["play_package"], start, sa_info, until_dt=end)
+        app_reviews[app["name"]] = {"appstore": appstore, "playstore": playstore, "status": status}
+        print(f"reviews app={app['name']} appstore={len(appstore)}:{status['appstore']} "
+              f"playstore={len(playstore)}:{status['playstore']}")
     model = build_model(apps, app_reviews, start, end, display_tz=tz, gemini_key=gemini_key or None)
     print(f"records: reviews={model['grand_total']} fetched={model['total_fetched']}")
     tail, html = render(model)

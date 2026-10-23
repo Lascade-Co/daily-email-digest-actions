@@ -1,6 +1,6 @@
 # Daily email digests
 
-Five daily emails share one rendering shell and Gmail SMTP transport: MarineRadar web revenue, app reviews, MarineRadar surveys, Smart Ruler surveys, and Install → Paid conversion. The two survey products share one pipeline and workflow.
+Five daily emails share one rendering shell and Gmail SMTP transport: MarineRadar web revenue, app reviews (MarineRadar, Smart Ruler, GeoAnimator, TravelAnimator), MarineRadar surveys, Smart Ruler surveys, and Install → Paid conversion. The two survey products share one pipeline and workflow.
 
 Each digest has **PT** (`America/Los_Angeles`, DST-aware) and **IST** (`Asia/Kolkata`) editions. Existing recipient lists and sender display names live in `data/email_config.json`; the former `pst` recipient key is now `pt`.
 
@@ -80,6 +80,12 @@ Rendered content and recipients stay out of public Actions logs. Logs contain co
 | `PREVIEW_KEY` | Required encryption key for dry-run artifacts |
 
 No Telegram integration is used. Failed workflows remain visible in GitHub Actions.
+
+## App reviews: partial data
+
+The reviews digest covers the apps in `data/reviews_apps.json`. Every app and store gets a fetch status: missing credentials, an auth or HTTP error, or a Play scan that hits its page cap all mark that store as failed or incomplete. The email then shows an amber "Partial data" callout under that app instead of "No new reviews", and the subject ends with "(partial)". The run log prints one count-only line per app, for example `reviews app=TravelAnimator appstore=0:ok playstore=3:ok`.
+
+A partial email still counts as delivered, so recovery runs do not refill it. To recheck a day after access is fixed, dispatch the workflow with `to` set to a test address. The Play service account needs the "Reply to reviews" permission on each app in Play Console, and the App Store key must belong to a team that can see each app.
 
 ## Shared shell and local verification
 

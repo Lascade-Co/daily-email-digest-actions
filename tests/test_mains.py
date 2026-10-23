@@ -51,7 +51,7 @@ class MainBuildTests(unittest.TestCase):
         calls = []
         def fetch(app, start, *credentials, until_dt):
             calls.append((start.isoformat(), until_dt.isoformat()))
-            return []
+            return [], "ok"
         with tempfile.TemporaryDirectory(dir=ROOT) as directory, contextlib.chdir(directory), patch.dict(os.environ, {"ASC_KEY_ID": "key", "ASC_ISSUER_ID": "issuer", "ASC_PRIVATE_KEY": "pem", "GOOGLE_SA_KEY": "", "GITHUB_ACTIONS": "false"}), patch.object(main, "fetch_appstore_reviews", side_effect=fetch), patch.object(main, "send_digest", side_effect=AssertionError("dry run must not send")), contextlib.redirect_stdout(io.StringIO()):
             main.main(["--edition", "pt", "--report-date", "2026-10-21", "--dry-run"])
             subject, _ = self._read_preview("reviews", "pt")

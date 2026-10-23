@@ -65,8 +65,10 @@ def render(model):
     """Return the metric tail and HTML body; the caller composes the subject."""
     m = model
     count = m["grand_total"]
-    tail = f"{count} review{'s' if count != 1 else ''} with 3★ or under"
-    preheader = f"{tail} from {m.get('total_fetched', count)} total across {len(m['apps'])} apps"
+    partial = " (partial)" if m.get("partial") else ""
+    tail = f"{count} review{'s' if count != 1 else ''} with 3★ or under{partial}"
+    preheader = (f"{count} review{'s' if count != 1 else ''} with 3★ or under from "
+                 f"{m.get('total_fetched', count)} total across {len(m['apps'])} apps{partial}")
     body = shell.masthead(
         "Daily review digest", "App reviews", lead=m["date_str"],
     )
@@ -88,6 +90,13 @@ def render(model):
              'class="body-cell">' + summary + grid + '</td></tr>\n')
     for app in m["apps"]:
         body += shell.cell(shell.h2(app["name"]), "32px 40px 0 40px")
+        problems = app.get("problems", [])
+        for label, state in problems:
+            text = (f"{label} reviews may be incomplete today" if state == "incomplete"
+                    else f"Couldn't fetch {label} reviews today")
+            body += shell.cell(shell.callout("warning", "Partial data", text))
+        if not app["count"] and problems:
+            continue
         if not app["count"]:
             body += shell.cell(shell.small("No new reviews"))
             continue

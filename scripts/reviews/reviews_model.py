@@ -132,8 +132,12 @@ def build_model(apps_config, app_reviews, since_dt, now_dt, display_tz=None, gem
         grand_total += count
         all_reviews.extend(appstore + playstore)
 
+        problems = [(label, state) for store, label in (("appstore", "App Store"), ("playstore", "Play Store"))
+                    if (state := data.get("status", {}).get(store, "ok")) in ("failed", "incomplete")]
+
         apps.append({
             "name": name,
+            "problems": problems,
             "appstore_reviews": sorted(appstore, key=lambda r: r["date"], reverse=True),
             "playstore_reviews": sorted(playstore, key=lambda r: r["date"], reverse=True),
             "count": count,
@@ -151,6 +155,7 @@ def build_model(apps_config, app_reviews, since_dt, now_dt, display_tz=None, gem
         "apps": apps,
         "app_names": [a["name"] for a in apps_config],
         "grand_total": grand_total,
+        "partial": any(app["problems"] for app in apps),
         "total_fetched": total_fetched,
         "max_rating": max_rating,
         "overall_avg": _avg_rating(all_reviews),

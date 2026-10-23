@@ -63,8 +63,8 @@ class ReviewTranslationTests(unittest.TestCase):
         output = io.StringIO()
         with (
             patch.dict(os.environ, environment),
-            patch.object(reviews_main, "fetch_appstore_reviews", side_effect=lambda app_id, *a, **kw: appstore.get(app_id, [])),
-            patch.object(reviews_main, "fetch_playstore_reviews", side_effect=lambda package, *a, **kw: playstore.get(package, [])),
+            patch.object(reviews_main, "fetch_appstore_reviews", side_effect=lambda app_id, *a, **kw: (appstore.get(app_id, []), "ok")),
+            patch.object(reviews_main, "fetch_playstore_reviews", side_effect=lambda package, *a, **kw: (playstore.get(package, []), "ok")),
             patch.object(reviews_model, "detect_language", side_effect=lambda text: {SPANISH: "es", FRENCH: "fr"}.get(text, "en")),
             patch.object(reviews_main, "write_preview", side_effect=capture_preview),
             patch.object(reviews_main, "send_digest", side_effect=AssertionError("dry run must not send")),

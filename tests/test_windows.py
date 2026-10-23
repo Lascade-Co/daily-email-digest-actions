@@ -65,7 +65,8 @@ class FetchWindowTests(unittest.TestCase):
         stamps = ("2026-10-21T05:01:00Z", "2026-10-21T05:00:00Z", "2026-10-21T04:59:59Z", "2026-10-20T05:00:00Z", "2026-10-20T04:59:59Z")
         data = [{"attributes": {"createdDate": stamp, "rating": 2, "body": "Private review", "title": "Private title", "reviewerNickname": "Private author", "territory": "USA"}} for stamp in stamps]
         with patch.object(fetch, "_asc_jwt", return_value="token"), patch.dict(sys.modules, {"requests": SimpleNamespace(get=lambda *args, **kwargs: SimpleNamespace(status_code=200, json=lambda: {"data": data, "links": {}}))}):
-            result = fetch.fetch_appstore_reviews("app", start, "key", "issuer", "pem", until_dt=end)
+            result, status = fetch.fetch_appstore_reviews("app", start, "key", "issuer", "pem", until_dt=end)
+        self.assertEqual(status, "ok")
         self.assertEqual([item["date"] for item in result], ["2026-10-21T04:59:59+00:00", "2026-10-20T05:00:00+00:00"])
 
     def test_playstore_review_bounds_include_start_exclude_end(self):
@@ -75,11 +76,12 @@ class FetchWindowTests(unittest.TestCase):
         from urllib.parse import quote
         fetch = self._load("scripts.reviews.reviews_fetch")
         start, end = datetime.fromtimestamp(100, timezone.utc), datetime.fromtimestamp(200, timezone.utc)
-        data = [{"authorName": "Private author", "comments": [{"userComment": {"lastModified": {"seconds": t}, "text": "Private text", "starRating": 1}}]} for t in (99, 100, 199, 200, 260)]
+        data = [{"authorName": "Private author", "comments": [{"userComment": {"lastModified": {"seconds": t}, "text": "Private text", "starRating": 1}}]} for t in (260, 200, 199, 100, 99)]
         request_client = SimpleNamespace(utils=SimpleNamespace(quote=quote), get=lambda *args, **kwargs: SimpleNamespace(status_code=200, json=lambda: {"reviews": data}))
         with patch.object(fetch, "_play_access_token", return_value="token", create=True), patch.dict(sys.modules, {"requests": request_client}):
-            result = fetch.fetch_playstore_reviews("app", start, {}, until_dt=end)
-        self.assertEqual([item["date"] for item in result], ["1970-01-01T00:01:40+00:00", "1970-01-01T00:03:19+00:00"])
+            result, status = fetch.fetch_playstore_reviews("app", start, {}, until_dt=end)
+        self.assertEqual(status, "ok")
+        self.assertEqual([item["date"] for item in result], ["1970-01-01T00:03:19+00:00", "1970-01-01T00:01:40+00:00"])
 
     def test_conversion_cohort_result_respects_date_to(self):
         import sys
