@@ -35,7 +35,12 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertLess(build, hold)
         self.assertEqual(hold + 1, dedupe)
         self.assertEqual(steps[hold]["if"], "${{ github.event_name == 'schedule' }}")
-        self.assertIn("smtp_send.py", steps[-1]["run"])
+        self.assertIn("delivery.py", steps[-1]["run"])
+        send_env = steps[-1]["env"]
+        self.assertIn("RESEND_API_KEY", send_env)
+        self.assertIn("MAIL_FROM", send_env)
+        self.assertNotIn("GMAIL_USER", send_env)
+        self.assertNotIn("GMAIL_APP_PASSWORD", send_env)
         self.assertEqual(steps[-1]["name"], "${{ steps.settings.outputs.send_step }}")
         self.assertEqual(steps[-1]["if"], "${{ !inputs.dry_run }}")
 

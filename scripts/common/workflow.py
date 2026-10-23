@@ -1,8 +1,9 @@
-"""Figure-free workflow settings and fail-closed SMTP delivery dedupe.
+"""Figure-free workflow settings and fail-closed Resend delivery dedupe.
 
 The two gate files can run from a SHA-pinned curl download with only the JSON
 config beside them. The final dedupe command runs inside the send job's lock,
-after the hold; SMTP has no provider idempotency key to fall back on.
+after the hold; the frozen envelope and Resend idempotency key guard against
+duplicates.
 """
 from __future__ import annotations
 

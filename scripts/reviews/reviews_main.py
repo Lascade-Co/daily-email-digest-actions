@@ -14,7 +14,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(ROOT))
 
 from scripts.common.dates import report_date_for, subject, window_for
-from scripts.common.smtp_send import load_config, mask, send_digest, write_preview
+from scripts.common.delivery import load_config, mask, send_digest, write_preview
 from scripts.reviews.reviews_fetch import fetch_appstore_reviews, fetch_playstore_reviews
 from scripts.reviews.reviews_model import build_model
 from scripts.reviews.reviews_render import render

@@ -118,15 +118,16 @@ jobs:
           path: preview.tar.gz.enc
           if-no-files-found: error
           retention-days: 3
-      # Keep this last: production success records SMTP acceptance or a verified
+      # Keep this last: production success records Resend acceptance or a verified
       # prior acceptance. No post-send step can hide a successful delivery.
       - name: ${{ steps.settings.outputs.send_step }}
         if: ${{ !inputs.dry_run }}
         env:
           ALREADY_SENT: ${{ steps.dedupe.outputs.sent }}
           EDITION: ${{ inputs.edition }}
-          GMAIL_USER: ${{ secrets.GMAIL_USER }}
-          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          REPORT_DATE: ${{ steps.settings.outputs.report_date }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          MAIL_FROM: ${{ secrets.MAIL_FROM }}
         run: |
           if [ "$ALREADY_SENT" = True ]; then
             echo "Prior delivery verified; no additional message sent"
@@ -137,8 +138,9 @@ jobs:
               test -n "$TEST_TO"
               FLAGS+=(--to "$TEST_TO")
             fi
-            python3 scripts/common/smtp_send.py --digest "$DIGEST" --edition "$EDITION" \
-              --subject-file "out/$DIGEST-$EDITION.subject.txt" --html-file "out/$DIGEST-$EDITION.html" "${FLAGS[@]}"
+            python3 scripts/common/delivery.py --digest "$DIGEST" --edition "$EDITION" \
+              --subject-file "out/$DIGEST-$EDITION.subject.txt" --html-file "out/$DIGEST-$EDITION.html" \
+              --report-date "$REPORT_DATE" "${FLAGS[@]}"
           fi
 
   done:

@@ -12,7 +12,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(ROOT))
 
 from scripts.common.dates import report_date_for, subject, window_for
-from scripts.common.smtp_send import load_config, mask, send_digest, write_preview
+from scripts.common.delivery import load_config, mask, send_digest, write_preview
 from scripts.revenue.revenue_fetch import fetch_charges, fetch_refunds
 from scripts.revenue.revenue_model import build_model
 from scripts.revenue.revenue_render import render
