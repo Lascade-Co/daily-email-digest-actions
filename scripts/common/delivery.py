@@ -221,5 +221,7 @@ def main(argv=None):
 if __name__ == "__main__":
     try:
         main()
+    except DeliveryError as exc:
+        raise SystemExit(str(exc)) from None
     except Exception as exc:
         raise SystemExit(f"Delivery failed ({type(exc).__name__})") from None
