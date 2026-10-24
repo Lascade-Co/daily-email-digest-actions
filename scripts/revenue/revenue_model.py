@@ -47,18 +47,15 @@ def build_model(today_charges, today_refunds, month_charges, month_refunds, now_
 
     month_label = f"1–{disp_now.day} {SHORT_MONTHS[disp_now.month - 1]} {disp_now.year}"
 
-    # Purchase Source Breakdown — commented out until metadata property is configured
-    # TODO: Uncomment when purchase_source metadata key is set in Stripe
-    # source_meta_key = "purchase_source"
-    # by_source = defaultdict(lambda: {"count": 0, "total": 0.0})
-    # for c in today_charges:
-    #     src = c["metadata"].get(source_meta_key, "Unknown")
-    #     by_source[src]["count"] += 1
-    #     by_source[src]["total"] += c["amount_cents"] / 100
-    # sources = [
-    #     {"source": k, "count": v["count"], "total": v["total"]}
-    #     for k, v in sorted(by_source.items(), key=lambda kv: -kv[1]["total"])
-    # ]
+    by_source = defaultdict(lambda: {"count": 0, "total": 0.0})
+    for c in today_charges:
+        src = c["metadata"].get("placement", "Unknown")
+        by_source[src]["count"] += 1
+        by_source[src]["total"] += c["amount_cents"] / 100
+    sources = [
+        {"source": k, "count": v["count"], "total": v["total"]}
+        for k, v in sorted(by_source.items(), key=lambda kv: -kv[1]["total"])
+    ]
 
     return {
         "today_total": today_total,
@@ -74,5 +71,5 @@ def build_model(today_charges, today_refunds, month_charges, month_refunds, now_
         "month_label": month_label,
         "date_str": date_str,
         "cutoff_str": cutoff_str,
-        # "sources": sources,  # TODO: uncomment with Purchase Source Breakdown
+        "sources": sources,
     }

@@ -8,7 +8,12 @@ def fetch_charges(api_key, since_unix, until_unix):
     all_charges = []
     starting_after = None
     while True:
-        params = {"limit": 100, "created[gte]": since_unix, "created[lt]": until_unix}
+        params = {
+            "limit": 100,
+            "created[gte]": since_unix,
+            "created[lt]": until_unix,
+            "expand[]": "data.payment_intent",
+        }
         if starting_after:
             params["starting_after"] = starting_after
         resp = requests.get(
@@ -23,11 +28,15 @@ def fetch_charges(api_key, since_unix, until_unix):
         body = resp.json()
         for c in body.get("data", []):
             if c.get("status") == "succeeded" and since_unix <= c["created"] < until_unix:
+                meta = c.get("metadata", {})
+                pi = c.get("payment_intent")
+                if isinstance(pi, dict):
+                    meta = {**pi.get("metadata", {}), **meta}
                 all_charges.append({
                     "amount_cents": c["amount"],
                     "currency": c.get("currency", "usd"),
                     "created": c["created"],
-                    "metadata": c.get("metadata", {}),
+                    "metadata": meta,
                 })
         if not body.get("has_more") or not body.get("data"):
             break

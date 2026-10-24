@@ -47,6 +47,14 @@ def render(model):
              for pack in m["packs"]],
             aligns=["left", "right", "right"],
         ))
+    if m.get("sources"):
+        body += shell.cell(shell.h2("Purchase Source"), "32px 40px 0 40px")
+        body += shell.cell(shell.table(
+            ["Source", "Count", "Total"],
+            [[src["source"], src["count"], f"${format_money(src['total'])}"]
+             for src in m["sources"]],
+            aligns=["left", "right", "right"],
+        ))
     body += shell.cell(shell.h2("Month to Date"), "32px 40px 0 40px")
     body += shell.cell(shell.small(m["month_label"]))
     body += shell.cell(shell.table(
