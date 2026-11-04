@@ -1,0 +1,80 @@
+name: Daily Incomplete Checkout Outreach
+
+on:
+  schedule:
+    # 10:00 IST = 04:30 UTC
+    - cron: '30 4 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Build preview without sending
+        type: boolean
+        default: false
+      report_date:
+        description: YYYY-MM-DD; blank uses today IST
+        type: string
+        default: ''
+      to:
+        description: Send a TEST email only to this address
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: digest-incomplete-checkout
+  cancel-in-progress: false
+
+jobs:
+  outreach:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          sparse-checkout: |
+            scripts
+            data
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - name: Install dependencies
+        run: pip install --quiet requests==2.34.2
+      - name: Send incomplete checkout outreach
+        env:
+          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          MAIL_FROM: ${{ secrets.MAIL_FROM }}
+        run: |
+          FLAGS=()
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            FLAGS+=(--dry-run)
+          fi
+          if [ -n "${{ inputs.report_date }}" ]; then
+            FLAGS+=(--report-date "${{ inputs.report_date }}")
+          fi
+          if [ -n "${{ inputs.to }}" ]; then
+            FLAGS+=(--to "${{ inputs.to }}")
+          fi
+          python3 -m scripts.incomplete_checkout.main "${FLAGS[@]}"
+      - name: Encrypt preview
+        if: ${{ inputs.dry_run }}
+        env:
+          PREVIEW_KEY: ${{ secrets.PREVIEW_KEY }}
+        run: |
+          test -n "$PREVIEW_KEY" || { echo "PREVIEW_KEY is required" >&2; exit 1; }
+          tar czf - out | openssl enc -aes-256-cbc -pbkdf2 -salt -pass env:PREVIEW_KEY -out preview.tar.gz.enc
+      - name: Upload preview
+        if: ${{ inputs.dry_run }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: preview-incomplete-checkout-ist
+          path: preview.tar.gz.enc
+          if-no-files-found: error
+          retention-days: 3
+      - name: Deliver incomplete checkout IST for ${{ inputs.report_date || 'today' }}
+        if: ${{ !inputs.dry_run }}
+        run: echo "Outreach emails sent"

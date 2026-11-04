@@ -111,6 +111,14 @@
         "--apps",
         "data/conversion_apps.json"
       ]
+    },
+    "incomplete_checkout": {
+      "sender": "Angel Rose",
+      "reply_to": "connect@marineradar.com",
+      "name": "Incomplete checkout outreach",
+      "module": "scripts.incomplete_checkout.main",
+      "extra_args": [],
+      "_note": "Sends individual emails to each incomplete customer; recipients are dynamic from Stripe, not from this config"
     }
   },
   "editions": {
