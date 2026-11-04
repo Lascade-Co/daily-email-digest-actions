@@ -60,6 +60,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--report-date", type=date.fromisoformat,
                         help="YYYY-MM-DD; defaults to today IST")
+    parser.add_argument("--since", type=date.fromisoformat,
+                        help="Override window start to midnight IST on this date (for backfills)")
     parser.add_argument("--dry-run", action="store_true",
                         help="Render and log without sending")
     parser.add_argument("--to", default="",
@@ -81,10 +83,14 @@ def main(argv=None):
     report_date = args.report_date or datetime.now(IST).date()
     cutoff = datetime.combine(report_date, datetime.min.time().replace(hour=10),
                               tzinfo=IST)
-    window_start = int((cutoff - timedelta(hours=24)).timestamp())
+    if args.since:
+        window_start_dt = datetime.combine(args.since, datetime.min.time(), tzinfo=IST)
+    else:
+        window_start_dt = cutoff - timedelta(hours=24)
+    window_start = int(window_start_dt.timestamp())
     window_end = int(cutoff.timestamp())
 
-    print(f"window: {cutoff - timedelta(hours=24)} to {cutoff}")
+    print(f"window: {window_start_dt} to {cutoff}")
     customers = fetch_incomplete_customers(stripe_key, window_start, window_end)
 
     if not customers:

@@ -14,6 +14,10 @@ on:
         description: YYYY-MM-DD; blank uses today IST
         type: string
         default: ''
+      since:
+        description: Override window start (YYYY-MM-DD) for backfills
+        type: string
+        default: ''
       to:
         description: Send a TEST email only to this address
         type: string
@@ -55,6 +59,9 @@ jobs:
           fi
           if [ -n "${{ inputs.report_date }}" ]; then
             FLAGS+=(--report-date "${{ inputs.report_date }}")
+          fi
+          if [ -n "${{ inputs.since }}" ]; then
+            FLAGS+=(--since "${{ inputs.since }}")
           fi
           if [ -n "${{ inputs.to }}" ]; then
             FLAGS+=(--to "${{ inputs.to }}")
