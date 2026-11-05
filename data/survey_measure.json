@@ -8,7 +8,7 @@
   "status_col": 2,
   "surveys": [
     {
-      "sheet_name": "D2",
+      "sheet_name": "Form_Responses5",
       "label": "Day 2",
       "subtitle": "First measurement experience",
       "columns": [
@@ -31,7 +31,7 @@
       ]
     },
     {
-      "sheet_name": "D15",
+      "sheet_name": "Form_Responses4",
       "label": "Day 15",
       "subtitle": "Usage & workflows",
       "columns": [
@@ -48,7 +48,7 @@
       ]
     },
     {
-      "sheet_name": "D30",
+      "sheet_name": "Form_Responses6",
       "label": "Day 30",
       "subtitle": "Issues & retention",
       "columns": [
