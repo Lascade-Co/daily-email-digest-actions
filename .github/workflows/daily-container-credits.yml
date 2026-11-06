@@ -2,8 +2,8 @@ name: Daily Container Credits Digest
 
 on:
   schedule:
-    - cron: '51 3,6,9 * * *'
-    - cron: '17 13,16,19 * * *'
+    - cron: '53 3,6,9 * * *'
+    - cron: '19 13,16,19 * * *'
   workflow_dispatch:
     inputs:
       edition:

@@ -26,6 +26,7 @@ WORKFLOWS = {
     "daily-reviews.yml": (47, 13, ("reviews",)),
     "daily-survey.yml": (49, 15, ("survey_marine", "survey_measure", "survey_geo")),
     "daily-conversion.yml": (51, 17, ("conversion",)),
+    "daily-container-credits.yml": (53, 19, ("container_credits",)),
 }
 
 
