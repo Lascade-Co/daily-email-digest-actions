@@ -34,7 +34,6 @@ def main(argv=None):
 
     with open(args.products, encoding="utf-8") as source:
         products_config = json.load(source)
-    product_ids = [p["id"] for p in products_config]
 
     api_key = os.environ.get("ADAPTY_KEY_MARINERADAR", "")
     if not api_key:
@@ -44,8 +43,8 @@ def main(argv=None):
     today_date = (report_date - timedelta(days=1)).isoformat()
     month_first = end.astimezone(tz).replace(day=1).strftime("%Y-%m-%d")
 
-    today_data = fetch_credit_revenue(api_key, today_date, today_date, product_ids, tz=str(tz))
-    month_data = fetch_credit_revenue(api_key, month_first, today_date, product_ids, tz=str(tz))
+    today_data = fetch_credit_revenue(api_key, today_date, today_date, products_config, tz=str(tz))
+    month_data = fetch_credit_revenue(api_key, month_first, today_date, products_config, tz=str(tz))
     print(f"records: today_count={today_data['total_count']} month_count={month_data['total_count']}")
 
     model = build_model(products_config, today_data, month_data, end, start, display_tz=tz)
