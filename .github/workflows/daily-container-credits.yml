@@ -1,0 +1,128 @@
+name: Daily Container Credits Digest
+
+on:
+  schedule:
+    - cron: '51 3,6,9 * * *'
+    - cron: '17 13,16,19 * * *'
+  workflow_dispatch:
+    inputs:
+      edition:
+        description: Local delivery edition
+        type: choice
+        options: [both, pt, ist]
+        default: both
+      dry_run:
+        description: Build encrypted previews without sending
+        type: boolean
+        default: false
+      report_date:
+        description: YYYY-MM-DD; blank uses each edition's newest 05:00 cutoff
+        type: string
+        default: ''
+      recovery:
+        description: Send production mail only if no dated delivery succeeded
+        type: boolean
+        default: false
+      to:
+        description: Send a TEST email only to this address
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: digest-daily-container-credits-${{ github.event_name == 'schedule' && (startsWith(github.event.schedule, '17 ') && 'ist' || 'pt') || inputs.edition || 'both' }}-${{ github.event_name }}
+  cancel-in-progress: false
+
+env:
+  RAW: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}
+  EVENT: ${{ github.event_name }}
+  SCHEDULE: ${{ github.event.schedule }}
+  WORKFLOW: daily-container-credits.yml
+  INPUT_EDITION: ${{ inputs.edition || 'both' }}
+  INPUT_DATE: ${{ inputs.report_date }}
+  DRY_RUN: ${{ inputs.dry_run }}
+  RECOVERY: ${{ inputs.recovery }}
+  TEST_MODE: ${{ inputs.to != '' }}
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    outputs:
+      proceed: ${{ steps.timing.outputs.proceed }}
+      editions: ${{ steps.settings.outputs.editions }}
+      report_date: ${{ steps.settings.outputs.report_date }}
+      timezone: ${{ steps.settings.outputs.timezone }}
+      sent_step: ${{ steps.settings.outputs.sent_step }}
+    steps:
+      - name: Resolve edition
+        id: settings
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for file in workflow.py catchup_gate.py; do
+            curl -fsSL --retry 3 -o "$file" "$RAW/scripts/common/$file"
+          done
+          curl -fsSL --retry 3 -o email_config.json "$RAW/data/email_config.json"
+          python3 workflow.py settings
+      - name: First timing gate
+        id: timing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ZONE: ${{ steps.settings.outputs.timezone }}
+          SENT_STEP: ${{ steps.settings.outputs.sent_step }}
+          REPORT_DATE: ${{ steps.settings.outputs.report_date }}
+        run: |
+          if [ "$EVENT" = workflow_dispatch ]; then
+            echo 'proceed=true' >> "$GITHUB_OUTPUT"
+          else
+            python3 catchup_gate.py --phase 1 --event "$EVENT" --workflow "$WORKFLOW" \
+              --sent-step "$SENT_STEP" --tz "$ZONE" --target 05:05 --report-date "$REPORT_DATE"
+          fi
+
+  gate2:
+    needs: gate
+    if: needs.gate.outputs.proceed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    outputs:
+      proceed: ${{ steps.timing.outputs.proceed }}
+      editions: ${{ needs.gate.outputs.editions }}
+      report_date: ${{ needs.gate.outputs.report_date }}
+    steps:
+      - name: Second timing gate
+        id: timing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ZONE: ${{ needs.gate.outputs.timezone }}
+          SENT_STEP: ${{ needs.gate.outputs.sent_step }}
+          REPORT_DATE: ${{ needs.gate.outputs.report_date }}
+        run: |
+          if [ "$EVENT" = workflow_dispatch ]; then
+            echo 'proceed=true' >> "$GITHUB_OUTPUT"
+          else
+            curl -fsSL --retry 3 -o catchup_gate.py "$RAW/scripts/common/catchup_gate.py"
+            python3 catchup_gate.py --phase 2 --event "$EVENT" --workflow "$WORKFLOW" \
+              --sent-step "$SENT_STEP" --tz "$ZONE" --target 05:05 --report-date "$REPORT_DATE"
+          fi
+
+  email:
+    needs: gate2
+    if: needs.gate2.outputs.proceed == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.gate2.outputs.editions) }}
+    uses: ./.github/workflows/_digest.yml
+    with:
+      workflow: daily-container-credits.yml
+      digests: '["container_credits"]'
+      edition: ${{ matrix.edition }}
+      report_date: ${{ matrix.report_date }}
+      dry_run: ${{ inputs.dry_run || false }}
+      recovery: ${{ inputs.recovery || false }}
+      to: ${{ inputs.to || '' }}
+    secrets: inherit

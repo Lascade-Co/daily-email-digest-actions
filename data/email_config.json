@@ -112,6 +112,24 @@
         "data/conversion_apps.json"
       ]
     },
+    "container_credits": {
+      "sender": "MarineRadar",
+      "recipients": {
+        "ist": [
+          "angelrose@lascade.com",
+          "varsha@lascade.com"
+        ],
+        "pt": [
+          "cherian@lascade.com"
+        ]
+      },
+      "name": "Container tracking credits",
+      "module": "scripts.container_credits.container_credits_main",
+      "extra_args": [
+        "--products",
+        "data/container_credits.json"
+      ]
+    },
     "incomplete_checkout": {
       "sender": "Angel Rose",
       "reply_to": "connect@marineradar.com",
