@@ -85,7 +85,7 @@ def _parse_answer_list(answer):
 
 
 def _is_meaningful(text):
-    return text.strip().lower() not in _LOW_VALUE and len(text.strip()) > 2
+    return text.strip().lower() not in _LOW_VALUE
 
 
 def transform_to_tabs(responses, config):

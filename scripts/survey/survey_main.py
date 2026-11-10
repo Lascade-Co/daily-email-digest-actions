@@ -23,8 +23,8 @@ from scripts.survey.posthog_fetch import fetch_responses, transform_to_tabs
 from scripts.survey.posthog_fetch import FetchError as PostHogFetchError
 
 
-def _fetch_sheets(config, start, end, tz):
-    """Fetch survey data from Google Sheets."""
+def _google_settings():
+    """Read credentials used by Sheets and survey translation."""
     google_sa = os.environ.get("GOOGLE_SA_KEY", "")
     gemini_key = os.environ.get("GOOGLE_API_KEY", "")
     if not google_sa:
@@ -36,6 +36,12 @@ def _fetch_sheets(config, start, end, tz):
         sa_info = json.loads(base64.b64decode(google_sa))
     except Exception:
         raise ValueError("Invalid GOOGLE_SA_KEY") from None
+    return sa_info, gemini_key or None
+
+
+def _fetch_sheets(config, start, end, tz):
+    """Fetch survey data from Google Sheets."""
+    sa_info, gemini_key = _google_settings()
     fetched_tabs = {}
     failures = 0
     for survey in config["surveys"]:
@@ -46,19 +52,17 @@ def _fetch_sheets(config, start, end, tz):
             failures += 1
     print(f"records: rows={sum(len(rows) for rows in fetched_tabs.values())} failed_tabs={failures}")
     translate_fn = partial(translate_text, sa_info)
-    return fetched_tabs, translate_fn, gemini_key or None
+    return fetched_tabs, translate_fn, gemini_key
 
 
 def _fetch_posthog(config, start, end):
     """Fetch survey data from PostHog API."""
     api_key_env = config["posthog_api_key_env"]
     api_key = os.environ.get(api_key_env, "")
-    gemini_key = os.environ.get("GOOGLE_API_KEY", "")
     if not api_key:
         raise ValueError(f"{api_key_env} not set")
     mask(api_key)
-    if gemini_key:
-        mask(gemini_key)
+    sa_info, gemini_key = _google_settings()
     responses = fetch_responses(
         api_key, config["posthog_project_id"], config["posthog_survey_id"], start, end)
     print(f"records: posthog_responses={len(responses)}")
@@ -69,7 +73,7 @@ def _fetch_posthog(config, start, end):
         for i, ds in enumerate(detail_sections):
             surveys.insert(insert_idx + i, ds)
     print(f"records: rows={sum(len(rows) for rows in fetched_tabs.values())}")
-    return fetched_tabs, None, gemini_key or None
+    return fetched_tabs, partial(translate_text, sa_info), gemini_key
 
 
 def main(argv=None):

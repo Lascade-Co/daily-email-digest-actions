@@ -37,7 +37,7 @@ class RenderTests(unittest.TestCase):
     def test_reviews_keep_store_metadata_and_escape_customer_text(self):
         _, html = render_fixture("reviews", fixture_models()["reviews"])
         for text in ("App Store", "Play Store", "United States", "Android 16", "2.4.0",
-                     "Non-English", "No new reviews", "Route &lt;script&gt; &amp; chart",
+                     "Translation unavailable", "No new reviews", "Route &lt;script&gt; &amp; chart",
                      "Please retain &lt;waypoints&gt; &amp; route history."):
             self.assertIn(text, html)
         self.assertNotIn("<script>", html)

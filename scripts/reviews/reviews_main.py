@@ -18,6 +18,7 @@ from scripts.common.delivery import load_config, mask, send_digest, write_previe
 from scripts.reviews.reviews_fetch import fetch_appstore_reviews, fetch_playstore_reviews
 from scripts.reviews.reviews_model import build_model
 from scripts.reviews.reviews_render import render
+from scripts.survey import survey_fetch
 
 
 def main(argv=None):
@@ -64,7 +65,9 @@ def main(argv=None):
         app_reviews[app["name"]] = {"appstore": appstore, "playstore": playstore, "status": status}
         print(f"reviews app={app['name']} appstore={len(appstore)}:{status['appstore']} "
               f"playstore={len(playstore)}:{status['playstore']}")
-    model = build_model(apps, app_reviews, start, end, display_tz=tz, gemini_key=gemini_key or None)
+    translate_fn = (lambda text: survey_fetch.translate_text(sa_info, text)) if sa_info else None
+    model = build_model(apps, app_reviews, start, end, display_tz=tz,
+                        gemini_key=gemini_key or None, translate_fn=translate_fn)
     print(f"records: reviews={model['grand_total']} fetched={model['total_fetched']}")
     tail, html = render(model)
     title = subject(config["digests"]["reviews"]["name"], report_date, tail)

@@ -51,7 +51,7 @@ def fixture_models():
                     "body": "The map could use more harbor labels.",
                     "store": "playstore", "device": "Fixture phone",
                     "os_version": "Android 16", "author": "Sample reviewer",
-                    "version": "2.4.1", "is_non_english": True,
+                    "version": "2.4.1", "is_non_english": False, "translate_failed": True,
                 }],
             },
             {
@@ -73,7 +73,8 @@ def fixture_models():
                 "columns": ["Feedback", "Score"],
                 "rows": [
                     {"status_label": "Pro", "status_color": "#5a5aad", "cells": [
-                        {"value": "More <routes> & ports", "color": "#222", "bold": False},
+                        {"value": "More <routes> & ports", "color": "#222", "bold": False,
+                         "translated": True, "lang": "es", "translate_failed": False},
                         {"value": "4/5", "color": "#2a8c4a", "bold": True},
                     ]},
                     {"status_label": "Free", "status_color": "#888", "cells": [
@@ -142,6 +143,28 @@ def render_fixture(digest, model):
     return renderer.render(model)
 
 
+def translation_fixture_model():
+    """Four language regressions and one English review; no network needed.
+
+    See translation_cases.py for which inputs are handoff quotes or synthetic.
+    """
+    from translation_cases import REVIEW_CASES, review_inputs
+
+    reviews = review_inputs()
+    for review, case in zip(reviews, REVIEW_CASES):
+        review.update(language=case["language"], is_non_english=case["language"] != "en",
+                      translated_title=case["title_en"], translated_body=case["body_en"],
+                      translate_failed=False)
+    return {
+        "grand_total": 5, "total_fetched": 5, "max_rating": 3, "overall_avg": 2.0,
+        "date_str": "Wednesday, 4 November 2026", "since_str": "3 Nov 5:00 AM PST",
+        "app_names": ["Fixture app"], "apps": [{
+            "name": "Fixture app", "count": 5, "avg_rating": 2.0,
+            "appstore_reviews": reviews, "playstore_reviews": [],
+        }],
+    }
+
+
 def mobile_fixture_models():
     """Exercise translated feedback and the configured survey column layouts."""
     models = fixture_models()
@@ -153,6 +176,8 @@ def mobile_fixture_models():
         title="",
         body="El mapa necesita más etiquetas de puertos y rutas guardadas.",
         language="es",
+        is_non_english=True,
+        translate_failed=False,
         translated_body="The map needs more harbor labels and saved routes.",
     )
     from scripts.survey.survey_model import build_model
@@ -160,12 +185,12 @@ def mobile_fixture_models():
     timestamp = "2026-10-21 10:30:00"
     survey_rows = {
         "survey_measure": {
-            "D2": [
+            "Form_Responses5": [
                 [timestamp, "", "pro", "Yes, first try", ""],
                 [timestamp, "", "free", "Not yet", "Could not find a flat surface"],
             ],
-            "D15": [[timestamp, "", "pro", "Furniture", "Photos", "PDF"]],
-            "D30": [[timestamp, "", "free", "Slow measurements", "Saved rooms", "Every day"]],
+            "Form_Responses4": [[timestamp, "", "pro", "Furniture", "Photos", "PDF"]],
+            "Form_Responses6": [[timestamp, "", "free", "Slow measurements", "Saved rooms", "Every day"]],
         },
         "survey_marine": {
             "D30 Survey": [
@@ -211,7 +236,9 @@ def write_previews(output_directory):
     for digest, model in fixture_models().items():
         _, html = render_fixture(digest, model)
         (output_directory / f"{digest}.html").write_text(html, encoding="utf-8")
-    print("Rendered 5 synthetic fixture previews")
+    _, html = render_fixture("reviews", translation_fixture_model())
+    (output_directory / "reviews-translated.html").write_text(html, encoding="utf-8")
+    print("Rendered 6 synthetic fixture previews")
 
 
 if __name__ == "__main__":

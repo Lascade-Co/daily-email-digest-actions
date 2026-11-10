@@ -65,7 +65,7 @@ jobs:
         with:
           python-version: '3.13'
       - name: Install dependencies
-        run: pip install --quiet requests==2.34.2 pyjwt==2.13.0 cryptography==50.0.0 google-auth==2.56.3 langdetect==1.0.9
+        run: pip install --quiet requests==2.34.2 pyjwt==2.13.0 cryptography==50.0.0 google-auth==2.56.3
       - name: Resolve edition and report day
         id: settings
         run: python3 scripts/common/workflow.py settings

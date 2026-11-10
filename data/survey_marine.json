@@ -76,7 +76,7 @@
       "label": "Missing Ships",
       "subtitle": "Submissions",
       "columns": [
-        {"col": 1, "header": "Vessel", "bold_all": true},
+        {"col": 1, "header": "Vessel", "bold_all": true, "translate": false},
         {"col": 2, "header": "IMO"},
         {"col": 4, "header": "Type"},
         {"col": 5, "header": "Country"},

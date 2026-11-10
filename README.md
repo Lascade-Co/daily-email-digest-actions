@@ -74,8 +74,8 @@ Rendered content and recipients stay out of public Actions logs. Logs contain co
 | `GMAIL_USER`, `GMAIL_APP_PASSWORD` | Gmail SMTP |
 | `STRIPE_API_KEY` | MarineRadar web revenue |
 | `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_PRIVATE_KEY` | App Store Connect reviews |
-| `GOOGLE_SA_KEY` | Base64-encoded Google service account JSON for Play reviews and Sheets surveys |
-| `GOOGLE_API_KEY` | Survey text processing |
+| `GOOGLE_SA_KEY` | Base64-encoded Google service account JSON for Play reviews, Sheets surveys, and Cloud Translation |
+| `GOOGLE_API_KEY` | Gemini review translation and survey text processing |
 | `ADAPTY_KEY_MARINERADAR`, `ADAPTY_KEY_SMARTRULER`, `ADAPTY_KEY_GEOANIMATOR` | Conversion cohorts |
 | `PREVIEW_KEY` | Required encryption key for dry-run artifacts |
 
@@ -87,11 +87,21 @@ The reviews digest covers the apps in `data/reviews_apps.json`. Every app and st
 
 A partial email still counts as delivered, so recovery runs do not refill it. To recheck a day after access is fixed, dispatch the workflow with `to` set to a test address. The Play service account needs the "Reply to reviews" permission on each app in Play Console, and the App Store key must belong to a team that can see each app.
 
+## Feedback translation
+
+Every review with three stars or fewer goes to Gemini with its title and body, including short answers and romanized languages. English reviews stay unchanged. Gemini has a 30-second timeout and one retry with a 60-second timeout; if both attempts fail, each review falls back to Cloud Translation v2 using `GOOGLE_SA_KEY`. Successful translations replace the original title and body and show **Translated from <Language>**. When translation fails, the original remains with **Translation unavailable**.
+
+MarineRadar, Smart Ruler, and GeoAnimator survey answers use Cloud Translation language detection with no minimum text length. Empty values, numbers, URLs, and columns configured with `"translate": false` skip translation. The Missing Ships Vessel column uses that setting to preserve vessel names. Translated cells show a language tag. Custom distribution answers are translated before counting so matching English answers combine. Grouped summaries use translated inputs without a source-language tag; cells, options, and groups retain a failure note when translation is unavailable.
+
+`tests/live_translation_check.py` is a standalone real-service regression check. Its manual-only workflow, `live-translation-check.yml`, checks out the full repository and receives only `GOOGLE_API_KEY` and `GOOGLE_SA_KEY`. It runs fixed cases through Gemini, repeats them with Gemini forced to fail to exercise Cloud fallback, and checks a two-character Chinese survey answer. It prints only fixed case labels and PASS/FAIL, fails if a foreign case remains untranslated or an English case changes, and never loads delivery settings or sends mail. The first pass must succeed through Gemini; Cloud fallback cannot hide a Gemini failure.
+
+`tests/translation_cases.py` includes the exact Portuguese and romanized Hindi bodies supplied in the handoff, plus synthetic Russian, Indonesian, and English cases. The exact Russian and Indonesian November 4 title/body inputs were not supplied; those fixtures must be replaced before claiming an exact replay of that day's reviews. The coordinator runs the real-service workflow and test emails after integration.
+
 ## Shared shell and local verification
 
 `scripts/common/email_shell.py` is a copy of `product-intelligence/Style Template/email_shell.py`. Edit the canonical file, then re-copy its exact bytes after the two provenance header lines. Do not edit the copy or its CSS independently. Renderers compose digest-specific content around the shell helpers.
 
-Tests use `unittest`, synthetic fixtures, and mocked transports without network requests. Install `requirements-dev.txt` for the YAML workflow checks, then run:
+Tests use `unittest`, synthetic fixtures, and mocked transports without network requests. Install `requests` and `requirements-dev.txt` for the transport and YAML workflow checks, then run:
 
 ```bash
 python3 -m unittest discover -s tests -q
@@ -100,6 +110,6 @@ actionlint .github/workflows/*.yml
 python3 tests/render_fixtures.py .scratch/render-fixtures
 ```
 
-Run the product-intelligence email validator on all five generated HTML files. Before landing, compare SHA-256 of the canonical shell with the copy after removing its first two lines. Local `out/`, fixture scratch files, and encrypted archives are ignored by Git.
+The renderer command writes the five standard previews plus `reviews-translated.html`, containing four translated reviews and an unchanged English review. Run the product-intelligence email validator on all six generated HTML files. Before landing, compare SHA-256 of the canonical shell with the copy after removing its first two lines. Local `out/`, fixture scratch files, and encrypted archives are ignored by Git.
 
 The coordinator handles branch dispatches, real-data previews, approval, merge, and submodule updates. At cutover, possible one-day duplicates are accepted; inspect the first PT and IST deliveries for dated green steps, 05:55–05:58 inbox arrival, sender names, subjects, and Gmail iOS dark mode. This lane does not push or change `main`.

@@ -7,6 +7,40 @@ import re
 from scripts.common import email_shell as shell
 
 
+_LANGUAGES = {
+    "ar": "Arabic", "bn": "Bengali", "de": "German", "en": "English",
+    "es": "Spanish", "fa": "Persian", "fr": "French", "he": "Hebrew",
+    "hi": "Hindi", "id": "Indonesian", "it": "Italian", "ja": "Japanese",
+    "ko": "Korean", "ms": "Malay", "nl": "Dutch", "pl": "Polish",
+    "pt": "Portuguese", "ru": "Russian", "ta": "Tamil", "te": "Telugu",
+    "th": "Thai", "tr": "Turkish", "uk": "Ukrainian", "ur": "Urdu",
+    "vi": "Vietnamese", "zh": "Chinese",
+}
+
+
+def _translation_note(item, inline=False, source=True):
+    if item.get("translate_failed"):
+        label = "Translation unavailable"
+    elif source and item.get("translated"):
+        language = _LANGUAGES.get(str(item.get("lang") or "").lower().split("-")[0])
+        label = f"Translated from {language}" if language else "Translated"
+    else:
+        return ""
+    return (
+        (" " if inline else "<br />")
+        + '<span style="font-size:11px; line-height:1.5; color:#666666;" '
+        'class="text-muted">' + escape(label) + '</span>'
+    )
+
+
+def _markup_table(headers, rows, **kwargs):
+    """Fill generated cells with trusted markup containing escaped field values."""
+    table = shell.table(headers, [[""] * len(headers) for _ in rows], **kwargs)
+    content = iter(value for row in rows for value in row)
+    return re.sub(r'(<td\b[^>]*>)(</td>)',
+                  lambda match: match[1] + next(content) + match[2], table)
+
+
 def _distribution(options):
     """Compose horizontal bars from escaped labels and the template palette."""
     rows = []
@@ -19,6 +53,7 @@ def _distribution(options):
         rows.append(
             f'<tr{stripe}><td width="42%" style="padding:10px 12px;">'
             + escape(str(option["value"]))
+            + _translation_note(option)
             + '</td><td width="33%" style="padding:10px 6px;">'
             '<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"><tr>'
             f'<td width="{width:g}%" bgcolor="{color}" style="background-color:{color}; '
@@ -49,9 +84,10 @@ def _summary(summary):
     elif kind == "grouped":
         groups = summary["groups"]
         if groups:
-            table = shell.table(
+            table = _markup_table(
                 ["Response theme", "Count"],
-                [[group["text"], group["count"]] for group in groups],
+                [[escape(str(group["text"])) + _translation_note(group, source=False),
+                  escape(str(group["count"]))] for group in groups],
                 aligns=["left", "right"], widths=["", "72"],
             ).replace(' width=""', '', 1)
             body += shell.cell(table)
@@ -80,39 +116,39 @@ def _response_table(section):
     headers = (["Status"] if section["has_status"] else []) + list(section["columns"])
     rows = []
     for response in section["rows"]:
-        status = [response.get("status_label") or "Free"] if section["has_status"] else []
-        rows.append(status + [cell["value"] for cell in response["cells"]])
+        status = [{"value": response.get("status_label") or "Free"}] if section["has_status"] else []
+        rows.append(status + response["cells"])
     if len(headers) < 4:
         widths = _response_widths(headers) if len(headers) in (2, 3) else None
-        return shell.table(headers, rows, widths=widths)
+        return _markup_table(headers, [
+            [escape(str(cell["value"])) + _translation_note(cell) for cell in row]
+            for row in rows
+        ], widths=widths)
 
     records = []
     for row in rows:
-        fields = [(str(header), str(value).strip())
-                  for header, value in zip(headers, row) if value is not None]
-        fields = [(header, value) for header, value in fields if value and value != "—"]
+        fields = [(str(header), str(cell["value"]).strip(), cell)
+                  for header, cell in zip(headers, row) if cell["value"] is not None]
+        fields = [(header, value, cell) for header, value, cell in fields if value and value != "—"]
         primary = fields[0][1] if fields else ''
-        if fields and (row[0] is None or str(row[0]).strip() in ('', '—')):
+        if fields and (row[0]["value"] is None or str(row[0]["value"]).strip() in ('', '—')):
             header = fields[0][0]
             primary = header + (' ' if header == 'IMO' else ': ') + primary
-        record = '<strong>' + escape(primary) + '</strong>' if fields else ''
+        record = ('<strong>' + escape(primary) + '</strong>'
+                  + _translation_note(fields[0][2], inline=True)) if fields else ''
         if len(fields) > 1:
             caption = ' · '.join(
-                header + (' ' if header == 'IMO' else ': ') + value
-                for header, value in fields[1:]
+                escape(header + (' ' if header == 'IMO' else ': ') + value)
+                + _translation_note(cell, inline=True)
+                for header, value, cell in fields[1:]
             )
             record += (
                 '<br /><span style="font-size:13px; line-height:1.5; color:#666666;" '
-                'class="text-muted">' + escape(caption) + '</span>'
+                'class="text-muted">' + caption + '</span>'
             )
         records.append(record)
 
-    # The shell accepts text-only cells. Fill only its generated empty cells
-    # with trusted markup whose external field values are already escaped.
-    table = shell.table([headers[0]], [[""] for _ in records])
-    record_html = iter(records)
-    return re.sub(r'(<td\b[^>]*>)(</td>)',
-                  lambda match: match[1] + next(record_html) + match[2], table)
+    return _markup_table([headers[0]], [[record] for record in records])
 
 
 def render(model):

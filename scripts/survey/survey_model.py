@@ -1,13 +1,8 @@
 #!/usr/bin/env python3
-"""Pure data layer: filter, detect language, build the email model. No I/O."""
+"""Filter, translate, and group survey responses for the email model."""
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from scripts.common.dates import SHORT_MONTHS, long_date
-
-try:
-    from langdetect import detect as _detect
-except ImportError:
-    _detect = None
 
 _TIMESTAMP_FMTS = [
     "%m/%d/%Y %H:%M:%S",
@@ -95,21 +90,31 @@ def filter_new_responses(rows, cutoff_dt, tz=None, now_utc=None):
 
 
 def detect_and_translate(text, translate_fn):
-    """Return (display_text, was_translated). Uses langdetect if available."""
-    if not text or len(text) < 20:
-        return text, False
-    if _detect is None:
-        return text, False
+    """Return (display_text, translated, language, failed), using Cloud detection."""
+    if not text or not translate_fn:
+        return text, False, None, False
+    if re.fullmatch(r"[+-]?(?:\d+(?:[.,]\d+)*|[.,]\d+)%?", text.strip()):
+        return text, False, None, False
+    if re.match(r"^(?:[a-z][a-z0-9+.-]*://|www\.)\S+$", text.strip(), re.IGNORECASE):
+        return text, False, None, False
     try:
-        lang = _detect(text)
+        translated, lang, ok = translate_fn(text)
+        if not ok or not isinstance(translated, str) or not translated.strip() or not isinstance(lang, str) or not lang:
+            return text, False, None, True
     except Exception:
-        return text, False
-    if lang == "en":
-        return text, False
-    translated = translate_fn(text)
-    if translated and translated != text:
-        return translated, True
-    return text, False
+        log.warning("Survey translation failed")
+        return text, False, None, True
+    if lang.lower().split("-")[0] == "en":
+        return text, False, lang, False
+    return translated, translated != text, lang, False
+
+
+def _translated_value(text, col_def, translate_fn):
+    if col_def.get("translate", True):
+        value, translated, lang, failed = detect_and_translate(text, translate_fn)
+    else:
+        value, translated, lang, failed = text, False, None, False
+    return {"value": value, "translated": translated, "lang": lang, "translate_failed": failed}
 
 
 def _cell_value(row, col_index):
@@ -224,25 +229,51 @@ def _split_multi(val, color_map=None):
     for p in parts:
         if not p:
             continue
-        if _OTHER_RE.match(p):
-            out.append("Other")
-        elif color_map:
-            matched = False
-            for key in color_map:
-                if p.lower() == key.lower():
-                    out.append(key)
-                    matched = True
-                    break
-            if not matched:
-                out.append(p)
-        else:
-            out.append(p)
+        out.append(_normalise_option(p, color_map))
     return out
+
+
+def _normalise_option(value, color_map=None):
+    if _OTHER_RE.match(value):
+        return "Other"
+    for key in color_map or {}:
+        if value.lower() == key.lower():
+            return key
+    return value
+
+
+def _build_distribution(rows, col_def, translate_fn):
+    color_map = col_def.get("color_map", {})
+    counter = Counter()
+    statuses = {}
+    for row in rows:
+        for part in _split_multi(_cell_value(row, col_def["col"]), color_map):
+            item = _translated_value(part, col_def, translate_fn)
+            value = _normalise_option(item["value"], color_map)
+            counter[value] += 1
+            status = statuses.setdefault(value, {
+                "translated": False, "lang": None, "translate_failed": False,
+            })
+            status["translate_failed"] |= item["translate_failed"]
+            if item["translated"]:
+                if not status["translated"]:
+                    status["lang"] = item["lang"]
+                elif status["lang"] != item["lang"]:
+                    status["lang"] = None
+                status["translated"] = True
+    total = sum(counter.values())
+    options = [{
+        "value": value, "count": count,
+        "pct": round(count / total * 100, 1),
+        "color": color_map.get(value, _PALETTE[index % len(_PALETTE)]),
+        **statuses[value],
+    } for index, (value, count) in enumerate(counter.most_common())]
+    return {"header": col_def["header"], "total": total, "options": options}
 
 
 def _is_meaningful(text):
     """Return True if a free-text response carries signal."""
-    return text.strip().lower() not in _LOW_VALUE and len(text.strip()) > 2
+    return text.strip().lower() not in _LOW_VALUE
 
 
 def build_model(config, fetched_tabs, cutoff_dt, now_dt, translate_fn=None, display_tz=None, gemini_key=None):
@@ -283,30 +314,8 @@ def build_model(config, fetched_tabs, cutoff_dt, now_dt, translate_fn=None, disp
                     free_count += 1
 
         if render_mode == "distribution":
-            distributions = []
-            for col_def in survey["columns"]:
-                color_map = col_def.get("color_map", {})
-                counter = Counter()
-                for row in filtered:
-                    val = _cell_value(row, col_def["col"])
-                    for part in _split_multi(val, color_map):
-                        counter[part] += 1
-                total_picks = sum(counter.values())
-                options = []
-                for oi, (val, cnt) in enumerate(counter.most_common()):
-                    pct = cnt / total_picks * 100 if total_picks else 0
-                    color = color_map.get(val, _PALETTE[oi % len(_PALETTE)])
-                    options.append({
-                        "value": val,
-                        "count": cnt,
-                        "pct": round(pct, 1),
-                        "color": color,
-                    })
-                distributions.append({
-                    "header": col_def["header"],
-                    "total": total_picks,
-                    "options": options,
-                })
+            distributions = [_build_distribution(filtered, col_def, translate_fn)
+                             for col_def in survey["columns"]]
             sections.append({
                 "label": survey["label"],
                 "subtitle": survey["subtitle"],
@@ -323,28 +332,8 @@ def build_model(config, fetched_tabs, cutoff_dt, now_dt, translate_fn=None, disp
                 is_score = col_def.get("is_score", False)
 
                 if color_map:
-                    counter = Counter()
-                    for row in filtered:
-                        val = _cell_value(row, col_def["col"])
-                        for part in _split_multi(val, color_map):
-                            counter[part] += 1
-                    total_picks = sum(counter.values())
-                    options = []
-                    for oi, (val, cnt) in enumerate(counter.most_common()):
-                        pct = cnt / total_picks * 100 if total_picks else 0
-                        color = color_map.get(val, _PALETTE[oi % len(_PALETTE)])
-                        options.append({
-                            "value": val,
-                            "count": cnt,
-                            "pct": round(pct, 1),
-                            "color": color,
-                        })
-                    summaries.append({
-                        "header": col_def["header"],
-                        "type": "distribution",
-                        "total": total_picks,
-                        "options": options,
-                    })
+                    distribution = _build_distribution(filtered, col_def, translate_fn)
+                    summaries.append({"type": "distribution", **distribution})
                 elif is_score:
                     scores = []
                     for row in filtered:
@@ -363,22 +352,22 @@ def build_model(config, fetched_tabs, cutoff_dt, now_dt, translate_fn=None, disp
                     })
                 else:
                     translated = []
+                    failed = []
                     for row in filtered:
                         v = _cell_value(row, col_def["col"])
                         if not _is_meaningful(v):
                             continue
-                        if translate_fn:
-                            tv, _ = detect_and_translate(v, translate_fn)
-                        else:
-                            tv = v
-                        tv = tv.strip()
+                        item = _translated_value(v, col_def, translate_fn)
+                        tv = item["value"].strip()
                         if tv:
-                            translated.append(tv)
+                            (failed if item["translate_failed"] else translated).append(tv)
                     grouped = _fuzzy_group(translated, gemini_key=gemini_key)
+                    grouped.extend({**group, "translate_failed": True}
+                                   for group in _simple_group(failed))
                     summaries.append({
                         "header": col_def["header"],
                         "type": "grouped",
-                        "total": len(translated),
+                        "total": len(translated) + len(failed),
                         "groups": grouped,
                     })
             sections.append({
@@ -404,9 +393,8 @@ def build_model(config, fetched_tabs, cutoff_dt, now_dt, translate_fn=None, disp
                 cells = []
                 for col_def in survey["columns"]:
                     val = _cell_value(row, col_def["col"])
-                    was_translated = False
-                    if translate_fn and val:
-                        val, was_translated = detect_and_translate(val, translate_fn)
+                    translation = _translated_value(val, col_def, translate_fn)
+                    val = translation["value"]
 
                     color = "#222"
                     bold = False
@@ -446,10 +434,10 @@ def build_model(config, fetched_tabs, cutoff_dt, now_dt, translate_fn=None, disp
                         bold = True
 
                     cells.append({
+                        **translation,
                         "value": val,
                         "color": color,
                         "bold": bold,
-                        "translated": was_translated,
                     })
 
                 rendered_rows.append({

@@ -9,7 +9,10 @@ _LANGUAGE_NAMES = {
     "es": "Spanish", "pt": "Portuguese", "fr": "French", "de": "German",
     "it": "Italian", "id": "Indonesian", "hi": "Hindi", "ru": "Russian",
     "tr": "Turkish", "ar": "Arabic", "ja": "Japanese", "ko": "Korean",
-    "zh-cn": "Chinese", "zh-tw": "Chinese", "vi": "Vietnamese",
+    "zh": "Chinese", "zh-cn": "Chinese", "zh-tw": "Chinese", "vi": "Vietnamese",
+    "nl": "Dutch", "uk": "Ukrainian", "pl": "Polish", "th": "Thai",
+    "bn": "Bengali", "ta": "Tamil", "te": "Telugu", "ur": "Urdu",
+    "ms": "Malay", "fa": "Persian", "he": "Hebrew", "el": "Greek",
 }
 
 
@@ -22,30 +25,29 @@ def _rating_color(rating):
 
 
 def _review_card(review):
-    """Use a Text Card with original captions and semantic translation badges."""
+    """Show English feedback with source-language or translation-failure badges."""
     rating = max(0, min(5, int(review.get("rating", 0))))
     title = f'{"★" * rating}{"☆" * (5 - rating)} · {rating}/5'
-    if review.get("title"):
-        title += f" · {review['title']}"
+    title_text = review.get("translated_title") or review.get("title", "")
+    body_text = review.get("translated_body") or review.get("body", "")
+    if review.get("translate_failed"):
+        title_text, body_text = review.get("title", ""), review.get("body", "")
+    if title_text:
+        title += f" · {title_text}"
     if review.get("store") == "appstore":
         store_meta = [review.get("country", "")]
     else:
         store_meta = [review.get("device", ""), review.get("os_version", "")]
     meta = store_meta + [review.get("author", ""), review.get("version", "")]
     metadata = shell.small(" · ".join(str(value) for value in meta if value))
-    translated = review.get("translated_body")
-    original_caption = ""
-    if translated:
+    if review.get("translate_failed"):
+        metadata = metadata.removesuffix("</p>") + " &nbsp; " + shell.badge("Translation unavailable", "muted") + "</p>"
+    elif review.get("is_non_english") and (review.get("translated_body") or review.get("translated_title")):
         language = review.get("language", "").lower()
         language_name = _LANGUAGE_NAMES.get(language, language.upper())
         metadata = metadata.removesuffix("</p>") + " &nbsp; " + shell.badge(
-            f"Translated · {language_name}", "info"
+            f"Translated from {language_name}", "info"
         ) + "</p>"
-        original_caption = shell.small(str(review.get("body", ""))).replace(
-            "Margin:0;", "Margin:0 0 12px 0;", 1
-        )
-    elif review.get("is_non_english"):
-        metadata = metadata.removesuffix("</p>") + " &nbsp; " + shell.badge("Non-English", "muted") + "</p>"
     return shell.cell(
         '<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" '
         'style="border-radius:6px; box-shadow:0 2px 8px rgba(0,0,0,0.08);">'
@@ -56,8 +58,8 @@ def _review_card(review):
         'line-height:1.4; color:#222222;">' + escape(title) + '</h4>'
         '<p style="margin:0; Margin:0 0 12px 0; '
         f'font-family:{shell.FONT_BODY}; font-size:15px; line-height:1.6; '
-        'color:#222222;" class="text-main">' + escape(str(translated or review.get("body", ""))) + '</p>'
-        + original_caption + metadata + '</td></tr></table>',
+        'color:#222222;" class="text-main">' + escape(str(body_text)) + '</p>'
+        + metadata + '</td></tr></table>',
     )
 
 

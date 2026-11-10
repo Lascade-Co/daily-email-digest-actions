@@ -50,10 +50,10 @@ def fetch_sheet_tab(sa_info, sheet_id, tab_name):
 
 
 def translate_text(sa_info, text, target="en"):
-    """Translate *text* to *target* via Cloud Translation v2. Returns original on failure."""
+    """Return (text, detected_source_language, ok) from Cloud Translation v2."""
     import requests
-    if not text or len(text) < 3:
-        return text
+    if not text:
+        return text, None, True
     try:
         creds = _get_credentials(sa_info, [_TRANSLATE_SCOPE])
         resp = requests.post(
@@ -63,10 +63,13 @@ def translate_text(sa_info, text, target="en"):
             timeout=15,
         )
         if resp.status_code != 200:
-            return text
+            return text, None, False
         translations = resp.json().get("data", {}).get("translations", [])
         if translations:
-            return translations[0].get("translatedText", text)
+            translated = translations[0].get("translatedText")
+            language = translations[0].get("detectedSourceLanguage")
+            if isinstance(translated, str) and translated.strip() and isinstance(language, str) and language:
+                return translated, language, True
     except Exception:
         pass
-    return text
+    return text, None, False
